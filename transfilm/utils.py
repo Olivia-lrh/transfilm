@@ -51,7 +51,10 @@ def format_time(seconds: float) -> str:
 
 def get_video_info(video_path: Path) -> dict:
     """Get basic video information"""
-    import ffmpeg
+    try:
+        import ffmpeg
+    except ImportError:
+        raise ImportError("ffmpeg-python is required. Install with: pip install ffmpeg-python")
     
     try:
         probe = ffmpeg.probe(str(video_path))

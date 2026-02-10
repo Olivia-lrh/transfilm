@@ -1,0 +1,35 @@
+version: '3.8'
+
+services:
+  transfilm:
+    build: .
+    ports:
+      - "7860:7860"
+    volumes:
+      - ./videos:/app/videos
+      - ./output:/app/output
+      - ./models:/app/.cache/models
+    environment:
+      - DEVICE=cuda
+      - GRADIO_SERVER_NAME=0.0.0.0
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    command: python webui.py
+
+  transfilm-cpu:
+    build: .
+    ports:
+      - "7861:7860"
+    volumes:
+      - ./videos:/app/videos
+      - ./output:/app/output
+      - ./models:/app/.cache/models
+    environment:
+      - DEVICE=cpu
+      - GRADIO_SERVER_NAME=0.0.0.0
+    command: python webui.py

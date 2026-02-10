@@ -19,6 +19,26 @@ class VideoProcessor:
         """Initialize video processor"""
         self.logger = logger
     
+    @staticmethod
+    def _parse_frame_rate(frame_rate_str: str) -> float:
+        """
+        Safely parse frame rate string (e.g., '30000/1001' or '30')
+        
+        Args:
+            frame_rate_str: Frame rate as string (fraction or decimal)
+            
+        Returns:
+            Frame rate as float
+        """
+        try:
+            if '/' in frame_rate_str:
+                numerator, denominator = frame_rate_str.split('/')
+                return float(numerator) / float(denominator)
+            else:
+                return float(frame_rate_str)
+        except (ValueError, ZeroDivisionError):
+            return 0.0
+    
     def extract_audio(
         self,
         video_path: Path,
@@ -146,7 +166,7 @@ class VideoProcessor:
                     'codec': video_info.get('codec_name', '') if video_info else '',
                     'width': video_info.get('width', 0) if video_info else 0,
                     'height': video_info.get('height', 0) if video_info else 0,
-                    'fps': eval(video_info.get('r_frame_rate', '0/1')) if video_info else 0,
+                    'fps': self._parse_frame_rate(video_info.get('r_frame_rate', '0/1')) if video_info else 0,
                 } if video_info else None,
                 'audio': {
                     'codec': audio_info.get('codec_name', '') if audio_info else '',

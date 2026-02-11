@@ -1,0 +1,35 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "transfilm"
+version = "0.1.0"
+description = "End-to-end transcription, translation, alignment, and TTS pipeline using Qwen3 models."
+readme = "README.md"
+requires-python = ">=3.13"
+license = { text = "MIT" }
+authors = [{ name = "Olivia-lrh" }]
+keywords = ["asr", "translation", "tts", "alignment", "qwen", "audio", "video"]
+classifiers = [
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.13",
+  "License :: OSI Approved :: MIT License",
+  "Operating System :: OS Independent",
+]
+dependencies = [
+  "torch==2.10.0",
+  "torchaudio==2.10.0",
+  "transformers>=4.49.0",
+  "accelerate>=0.34.0",
+  "sentencepiece>=0.2.0",
+  "numpy>=1.26.0",
+  "pydub>=0.25.1",
+  "tqdm>=4.66.0",
+]
+
+[project.scripts]
+transfilm = "transfilm.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]

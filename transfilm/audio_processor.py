@@ -244,3 +244,121 @@ class AudioProcessor:
     def get_audio_duration(self, audio_data: np.ndarray) -> float:
         """Get audio duration in seconds"""
         return len(audio_data) / self.sample_rate
+    
+    def concatenate_audio_with_timestamps(
+        self,
+        audio_segments: List[np.ndarray],
+        timestamps: List[Dict[str, float]],
+        total_duration: float
+    ) -> np.ndarray:
+        """
+        Concatenate audio segments according to timestamps
+        
+        Args:
+            audio_segments: List of audio data arrays
+            timestamps: List of timestamp dicts with 'start', 'end', 'duration'
+            total_duration: Target total duration in seconds
+            
+        Returns:
+            Concatenated audio data matching total_duration
+        """
+        self.logger.info(
+            f"Concatenating {len(audio_segments)} segments with timestamps "
+            f"to total duration {total_duration:.2f}s"
+        )
+        
+        if len(audio_segments) != len(timestamps):
+            raise ValueError(
+                f"Mismatch: {len(audio_segments)} segments but {len(timestamps)} timestamps"
+            )
+        
+        # Create output buffer
+        total_samples = int(total_duration * self.sample_rate)
+        output_audio = np.zeros(total_samples, dtype=np.float32)
+        
+        for i, (audio, timestamp) in enumerate(zip(audio_segments, timestamps)):
+            start_sample = int(timestamp['start'] * self.sample_rate)
+            target_duration = timestamp['duration']
+            target_samples = int(target_duration * self.sample_rate)
+            
+            # Adjust audio to match target duration
+            adjusted_audio = self.adjust_audio_length(
+                audio, target_samples, method='stretch'
+            )
+            
+            # Place in output buffer
+            end_sample = min(start_sample + len(adjusted_audio), total_samples)
+            output_audio[start_sample:end_sample] = adjusted_audio[:end_sample - start_sample]
+            
+            self.logger.debug(
+                f"Segment {i+1}: placed at {timestamp['start']:.2f}s, "
+                f"duration {target_duration:.2f}s"
+            )
+        
+        self.logger.info(f"Concatenated audio: {len(output_audio)/self.sample_rate:.2f}s")
+        return output_audio
+    
+    def match_audio_duration_to_target(
+        self,
+        audio_data: np.ndarray,
+        target_duration: float,
+        method: str = 'stretch'
+    ) -> np.ndarray:
+        """
+        Match audio duration to target with high precision
+        
+        Args:
+            audio_data: Input audio data
+            target_duration: Target duration in seconds
+            method: Method to use ('stretch', 'speed', 'hybrid')
+            
+        Returns:
+            Audio data with exact target duration
+        """
+        current_duration = len(audio_data) / self.sample_rate
+        target_samples = int(target_duration * self.sample_rate)
+        
+        if abs(current_duration - target_duration) < 0.01:
+            # Already very close, just trim/pad to exact samples
+            if len(audio_data) > target_samples:
+                return audio_data[:target_samples]
+            elif len(audio_data) < target_samples:
+                return np.pad(audio_data, (0, target_samples - len(audio_data)))
+            return audio_data
+        
+        self.logger.info(
+            f"Matching audio duration: {current_duration:.2f}s -> {target_duration:.2f}s "
+            f"(ratio: {target_duration/current_duration:.3f})"
+        )
+        
+        if method == 'stretch':
+            # Time stretch using librosa
+            return self.adjust_audio_length(audio_data, target_samples, method='stretch')
+        elif method == 'speed':
+            # Speed up/slow down (changes pitch)
+            rate = current_duration / target_duration
+            stretched = librosa.effects.time_stretch(audio_data, rate=rate)
+            # Ensure exact length
+            if len(stretched) > target_samples:
+                return stretched[:target_samples]
+            elif len(stretched) < target_samples:
+                return np.pad(stretched, (0, target_samples - len(stretched)))
+            return stretched
+        elif method == 'hybrid':
+            # Use stretch for small changes, speed for larger
+            ratio = target_duration / current_duration
+            if 0.9 <= ratio <= 1.1:
+                # Small change: use stretch (preserves pitch better)
+                return self.adjust_audio_length(audio_data, target_samples, method='stretch')
+            else:
+                # Large change: use speed change
+                rate = current_duration / target_duration
+                stretched = librosa.effects.time_stretch(audio_data, rate=rate)
+                if len(stretched) > target_samples:
+                    return stretched[:target_samples]
+                elif len(stretched) < target_samples:
+                    return np.pad(stretched, (0, target_samples - len(stretched)))
+                return stretched
+        else:
+            raise ValueError(f"Unknown method: {method}")
+

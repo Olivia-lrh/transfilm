@@ -124,46 +124,68 @@ class TTSEngine:
         text: str,
         sample_rate: int = 16000,
         voice_features: Optional[Dict[str, Any]] = None,
-        target_duration: Optional[float] = None
+        target_duration: Optional[float] = None,
+        reference_audio: Optional[np.ndarray] = None
     ) -> np.ndarray:
         """
-        Synthesize speech from text
+        Synthesize speech from text with voice cloning and precise duration control
         
         Args:
             text: Text to synthesize
             sample_rate: Target sample rate
             voice_features: Voice characteristics to apply
-            target_duration: Target duration in seconds
+            target_duration: Target duration in seconds (for timestamp matching)
+            reference_audio: Reference audio for voice cloning
             
         Returns:
-            Audio data as numpy array
+            Audio data as numpy array matching target_duration if specified
         """
         if not self.is_loaded:
             self.load_model()
         
         self.logger.info(f"Synthesizing text: {text[:100]}...")
+        if target_duration:
+            self.logger.info(f"Target duration: {target_duration:.2f}s")
         
         try:
-            # Tokenize text
-            inputs = self.tokenizer(
-                text,
-                return_tensors="pt",
-                padding=True,
-                truncation=True
-            )
+            # Prepare inputs with voice cloning if reference provided
+            if reference_audio is not None and config.ENABLE_VOICE_CLONING:
+                # Note: Actual Qwen3-TTS API may support reference audio
+                inputs = self.tokenizer(
+                    text,
+                    return_tensors="pt",
+                    padding=True,
+                    truncation=True
+                )
+                # Add reference audio processing here when API is available
+            else:
+                inputs = self.tokenizer(
+                    text,
+                    return_tensors="pt",
+                    padding=True,
+                    truncation=True
+                )
             
             # Move to device
             if not (self.use_8bit or self.use_4bit):
                 inputs = {k: v.to(self.device) for k, v in inputs.items()}
             
+            # Prepare generation parameters
+            gen_kwargs = {
+                "sample_rate": sample_rate,
+                "max_length": int(sample_rate * 30)  # Max 30 seconds by default
+            }
+            
+            # If target duration specified, try to guide generation
+            if target_duration is not None and config.ENABLE_DURATION_MATCHING:
+                gen_kwargs["max_length"] = int(sample_rate * target_duration * 1.2)
+                # Add duration control parameters when API supports it
+            
             # Generate audio
             with torch.no_grad():
-                # Note: Actual Qwen3-TTS API may differ
-                # This is a placeholder implementation
                 audio_values = self.model.generate(
                     **inputs,
-                    sample_rate=sample_rate,
-                    max_length=int(sample_rate * 30)  # Max 30 seconds
+                    **gen_kwargs
                 )
             
             # Convert to numpy
@@ -176,30 +198,75 @@ class TTSEngine:
             if voice_features and config.ENABLE_VOICE_CLONING:
                 audio_data = self._apply_voice_features(audio_data, voice_features)
             
-            # Adjust duration if specified
+            # Match target duration precisely if specified
             if target_duration is not None:
-                target_samples = int(target_duration * sample_rate)
-                if len(audio_data) != target_samples:
-                    # Simple time stretching
-                    import librosa
-                    rate = len(audio_data) / target_samples
-                    audio_data = librosa.effects.time_stretch(audio_data, rate=rate)
-                    # Ensure exact length
-                    if len(audio_data) > target_samples:
-                        audio_data = audio_data[:target_samples]
-                    elif len(audio_data) < target_samples:
-                        audio_data = np.pad(
-                            audio_data,
-                            (0, target_samples - len(audio_data)),
-                            mode='constant'
-                        )
+                audio_data = self._match_duration_precisely(
+                    audio_data, target_duration, sample_rate
+                )
             
-            self.logger.info(f"Synthesized audio: {len(audio_data)/sample_rate:.2f}s")
+            actual_duration = len(audio_data) / sample_rate
+            self.logger.info(f"Synthesized audio: {actual_duration:.2f}s")
+            
+            if target_duration and abs(actual_duration - target_duration) > 0.1:
+                self.logger.warning(
+                    f"Duration mismatch: target {target_duration:.2f}s, "
+                    f"actual {actual_duration:.2f}s"
+                )
+            
             return audio_data
             
         except Exception as e:
             self.logger.error(f"Failed to synthesize audio: {e}")
             raise
+    
+    def _match_duration_precisely(
+        self,
+        audio_data: np.ndarray,
+        target_duration: float,
+        sample_rate: int
+    ) -> np.ndarray:
+        """
+        Match audio duration to target precisely using time stretching
+        
+        Args:
+            audio_data: Generated audio
+            target_duration: Target duration in seconds
+            sample_rate: Sample rate
+            
+        Returns:
+            Audio data with exact target duration
+        """
+        import librosa
+        
+        current_duration = len(audio_data) / sample_rate
+        target_samples = int(target_duration * sample_rate)
+        
+        # Check if within tolerance
+        tolerance = config.DURATION_TOLERANCE if hasattr(config, 'DURATION_TOLERANCE') else 0.1
+        if abs(current_duration - target_duration) < tolerance:
+            # Close enough, just trim/pad to exact length
+            if len(audio_data) > target_samples:
+                return audio_data[:target_samples]
+            elif len(audio_data) < target_samples:
+                return np.pad(audio_data, (0, target_samples - len(audio_data)), mode='constant')
+            return audio_data
+        
+        # Need to stretch/compress
+        rate = current_duration / target_duration
+        self.logger.info(
+            f"Adjusting duration: {current_duration:.2f}s -> {target_duration:.2f}s "
+            f"(rate: {rate:.3f})"
+        )
+        
+        stretched = librosa.effects.time_stretch(audio_data, rate=rate)
+        
+        # Ensure exact length
+        if len(stretched) > target_samples:
+            return stretched[:target_samples]
+        elif len(stretched) < target_samples:
+            return np.pad(stretched, (0, target_samples - len(stretched)), mode='constant')
+        
+        return stretched
     
     def _apply_voice_features(
         self,

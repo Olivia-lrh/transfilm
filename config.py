@@ -16,7 +16,9 @@ TEMP_DIR.mkdir(exist_ok=True)
 MODELS_DIR.mkdir(exist_ok=True)
 
 # Model configurations
-DEFAULT_ASR_MODEL = "Qwen/Qwen3-ASR"
+DEFAULT_ASR_MODEL = "Qwen/Qwen3-ASR-1.7B"
+DEFAULT_TRANSLATION_MODEL = "Qwen/Qwen3-0.6B"
+DEFAULT_FORCED_ALIGNER_MODEL = "Qwen/Qwen3-ForcedAligner-0.6B"
 DEFAULT_TTS_MODEL = "Qwen/Qwen3-TTS"
 
 # Device configuration
@@ -27,6 +29,13 @@ DEFAULT_DTYPE = "float16"  # Options: "float32", "float16", "bfloat16"
 DEFAULT_CHUNK_SIZE = 30  # seconds
 DEFAULT_SAMPLE_RATE = 16000  # Hz
 DEFAULT_LANGUAGE = "zh"  # Options: "zh", "en"
+DEFAULT_TARGET_LANGUAGE = "en"  # Translation target language
+
+# Translation settings
+ENABLE_CHARACTER_COUNT_MATCHING = True  # Match character counts for similar audio duration
+CHARACTER_COUNT_TOLERANCE = 0.2  # Allow 20% variation in character count
+ENABLE_DURATION_MATCHING = True  # Match audio duration to timestamps
+DURATION_TOLERANCE = 0.1  # Allow 10% variation in duration
 
 # Memory optimization settings
 ENABLE_MODEL_OFFLOADING = True  # Offload models to CPU when not in use

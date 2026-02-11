@@ -31,10 +31,13 @@ class TransFilmWebUI:
         self,
         input_video,
         asr_model: str,
+        translation_model: str,
+        forced_aligner_model: str,
         tts_model: str,
         device: str,
         chunk_size: float,
-        language: str,
+        source_language: str,
+        target_language: str,
         progress=gr.Progress()
     ):
         """Process video with progress tracking"""
@@ -58,10 +61,13 @@ class TransFilmWebUI:
             
             self.pipeline = VideoDubbingPipeline(
                 asr_model=asr_model,
+                translation_model=translation_model,
+                forced_aligner_model=forced_aligner_model,
                 tts_model=tts_model,
                 device=device,
                 chunk_size=chunk_size,
-                language=language,
+                source_language=source_language,
+                target_language=target_language,
                 progress_callback=gradio_progress_callback
             )
             
@@ -163,7 +169,20 @@ def create_ui():
                 asr_model = gr.Textbox(
                     label="ASR Model / ASR模型",
                     value=config.DEFAULT_ASR_MODEL,
-                    placeholder="Qwen/Qwen3-ASR"
+                    placeholder="Qwen/Qwen3-ASR-1.7B"
+                )
+                
+                translation_model = gr.Textbox(
+                    label="Translation Model / 翻译模型",
+                    value=config.DEFAULT_TRANSLATION_MODEL,
+                    placeholder="Qwen/Qwen3-0.6B"
+                )
+            
+            with gr.Column():
+                forced_aligner_model = gr.Textbox(
+                    label="Forced Aligner Model / 时间对齐模型",
+                    value=config.DEFAULT_FORCED_ALIGNER_MODEL,
+                    placeholder="Qwen/Qwen3-ForcedAligner-0.6B"
                 )
                 
                 tts_model = gr.Textbox(
@@ -179,10 +198,16 @@ def create_ui():
                     value=config.DEFAULT_DEVICE
                 )
                 
-                language = gr.Radio(
-                    label="Language / 语言",
+                source_language = gr.Radio(
+                    label="Source Language / 源语言",
                     choices=["zh", "en"],
                     value=config.DEFAULT_LANGUAGE
+                )
+                
+                target_language = gr.Radio(
+                    label="Target Language / 目标语言",
+                    choices=["zh", "en"],
+                    value=config.DEFAULT_TARGET_LANGUAGE
                 )
             
             with gr.Column():
@@ -207,10 +232,13 @@ def create_ui():
             inputs=[
                 input_video,
                 asr_model,
+                translation_model,
+                forced_aligner_model,
                 tts_model,
                 device,
                 chunk_size,
-                language
+                source_language,
+                target_language
             ],
             outputs=[output_video, status_text]
         )
@@ -221,14 +249,23 @@ def create_ui():
             ### 📖 Usage Instructions / 使用说明
             
             1. **Upload Video / 上传视频**: Click the video upload area to select a video file
-            2. **Configure Settings / 配置设置**: Adjust ASR/TTS models, device, and other parameters
-            3. **Start Processing / 开始处理**: Click "Start Dubbing" button to begin
-            4. **Download Result / 下载结果**: Download the dubbed video when processing is complete
+            2. **Configure Models / 配置模型**: Adjust ASR, Translation, Aligner and TTS models
+            3. **Set Languages / 设置语言**: Select source and target languages
+            4. **Start Processing / 开始处理**: Click "Start Dubbing" button to begin
+            5. **Download Result / 下载结果**: Download the dubbed video when processing is complete
+            
+            **Enhanced Workflow / 增强工作流:**
+            - Stage 1: ASR transcription with Qwen3-ASR-1.7B
+            - Stage 2: Segmentation & translation with Qwen3-0.6B
+            - Stage 3: Timestamp alignment with Qwen3-ForcedAligner-0.6B
+            - Stage 4: Voice cloning & TTS with Qwen3-TTS
+            - Stage 5: Audio assembly with timestamp synchronization
             
             **Tips / 提示:**
             - Use CPU mode if you have limited GPU memory / 显存不足时使用CPU模式
             - Smaller chunk sizes use less memory but take longer / 更小的分块使用更少显存但耗时更长
             - First run will download models (may take time) / 首次运行需下载模型（可能需要时间）
+            - Translation tries to match character counts for better duration / 翻译会尝试匹配字符数以获得更好的时长
             """
         )
     

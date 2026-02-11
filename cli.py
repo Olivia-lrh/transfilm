@@ -55,6 +55,18 @@ Examples:
         help=f"ASR model name or path (default: {config.DEFAULT_ASR_MODEL})"
     )
     parser.add_argument(
+        "--translation-model",
+        type=str,
+        default=config.DEFAULT_TRANSLATION_MODEL,
+        help=f"Translation model name or path (default: {config.DEFAULT_TRANSLATION_MODEL})"
+    )
+    parser.add_argument(
+        "--forced-aligner-model",
+        type=str,
+        default=config.DEFAULT_FORCED_ALIGNER_MODEL,
+        help=f"Forced aligner model name or path (default: {config.DEFAULT_FORCED_ALIGNER_MODEL})"
+    )
+    parser.add_argument(
         "--tts-model",
         type=str,
         default=config.DEFAULT_TTS_MODEL,
@@ -80,7 +92,14 @@ Examples:
         type=str,
         choices=["zh", "en"],
         default=config.DEFAULT_LANGUAGE,
-        help=f"Language code (default: {config.DEFAULT_LANGUAGE})"
+        help=f"Source language code (default: {config.DEFAULT_LANGUAGE})"
+    )
+    parser.add_argument(
+        "--target-language",
+        type=str,
+        choices=["zh", "en"],
+        default=config.DEFAULT_TARGET_LANGUAGE,
+        help=f"Target language code (default: {config.DEFAULT_TARGET_LANGUAGE})"
     )
     parser.add_argument(
         "--sample-rate",
@@ -160,25 +179,31 @@ def main():
     try:
         # Display configuration
         print("\n" + "="*60)
-        print("TransFilm - AI Video Dubbing")
+        print("TransFilm - AI Video Dubbing (Enhanced Workflow)")
         print("="*60)
-        print(f"Input:        {input_path}")
-        print(f"Output:       {output_path}")
-        print(f"ASR Model:    {args.asr_model}")
-        print(f"TTS Model:    {args.tts_model}")
-        print(f"Device:       {args.device}")
-        print(f"Chunk Size:   {args.chunk_size}s")
-        print(f"Language:     {args.language}")
-        print(f"Sample Rate:  {args.sample_rate} Hz")
+        print(f"Input:             {input_path}")
+        print(f"Output:            {output_path}")
+        print(f"ASR Model:         {args.asr_model}")
+        print(f"Translation Model: {args.translation_model}")
+        print(f"Aligner Model:     {args.forced_aligner_model}")
+        print(f"TTS Model:         {args.tts_model}")
+        print(f"Device:            {args.device}")
+        print(f"Chunk Size:        {args.chunk_size}s")
+        print(f"Source Language:   {args.language}")
+        print(f"Target Language:   {args.target_language}")
+        print(f"Sample Rate:       {args.sample_rate} Hz")
         print("="*60 + "\n")
         
         # Create pipeline
         pipeline = VideoDubbingPipeline(
             asr_model=args.asr_model,
+            translation_model=args.translation_model,
+            forced_aligner_model=args.forced_aligner_model,
             tts_model=args.tts_model,
             device=args.device,
             chunk_size=args.chunk_size,
-            language=args.language,
+            source_language=args.language,
+            target_language=args.target_language,
             sample_rate=args.sample_rate,
             progress_callback=progress_callback
         )

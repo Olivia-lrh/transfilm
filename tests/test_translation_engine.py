@@ -12,12 +12,12 @@ from transfilm.translation_engine import TranslationEngine
 def test_translation_engine_init():
     """测试翻译引擎初始化"""
     engine = TranslationEngine(
-        model_name="openbmb/MiniCPM-o-2_6",
+        model_name="Qwen/Qwen3-4B",
         device="cuda:0",
         dtype="bfloat16",
     )
     
-    assert engine.model_name == "openbmb/MiniCPM-o-2_6"
+    assert engine.model_name == "Qwen/Qwen3-4B"
     assert engine.device == "cuda:0"
     assert engine.model is None  # 初始化时模型未加载
     assert engine.tokenizer is None

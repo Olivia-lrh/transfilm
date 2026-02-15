@@ -22,7 +22,9 @@ class ModelDownloader:
         "forced_aligner": "Qwen/Qwen3-ForcedAligner-0.6B",
         "tts_custom": "Qwen/Qwen3-TTS-12Hz-1.7B-CustomVoice",
         "tts_clone": "Qwen/Qwen3-TTS-12Hz-1.7B-Base",
-        "translation": "openbmb/MiniCPM-o-2_6",
+        "translation": "Qwen/Qwen3-4B",
+        "translation_low_vram": "Qwen/Qwen3-1.7B",
+        "translation_ultra_low_vram": "Qwen/Qwen3-0.6B",
     }
     
     def __init__(

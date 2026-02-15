@@ -28,10 +28,13 @@ models:
     
   # 翻译模型
   translation:
-    model_name: "openbmb/MiniCPM-o-2_6"
+    # 模型选项:
+    # - Qwen/Qwen3-4B (推荐): 平衡质量和速度 (~8GB VRAM)
+    # - Qwen/Qwen3-1.7B: 低显存 (~4GB VRAM)
+    # - Qwen/Qwen3-0.6B: 超低显存 (~1.5GB VRAM)
+    model_name: "Qwen/Qwen3-4B"
     device: "cuda:0"
     dtype: "bfloat16"
-    attn_implementation: "sdpa"
     max_new_tokens: 2048
     sampling: false
 

@@ -119,7 +119,7 @@ def create_ui():
     """创建UI"""
     with gr.Blocks(title="Transfilm - AI视频配音系统") as app:
         gr.Markdown("# 🎬 Transfilm - AI视频配音系统")
-        gr.Markdown("使用Qwen3-ASR、Qwen3-TTS和MiniCPM-o进行高质量视频翻译配音")
+        gr.Markdown("使用Qwen3-ASR、Qwen3-TTS和Qwen3进行高质量视频翻译配音")
         
         with gr.Tabs():
             # 主要功能标签页
@@ -222,12 +222,12 @@ def create_ui():
                 6. 视频合并
                 
                 ## 硬件要求
-                - **推荐**: NVIDIA GPU (16GB+ VRAM)
+                - **推荐**: NVIDIA GPU (12GB+ VRAM)
                 - **最低**: NVIDIA GPU (8GB VRAM) 或 CPU
                 
                 ## 技术栈
                 - **ASR**: Qwen3-ASR-1.7B
-                - **翻译**: MiniCPM-o-2_6
+                - **翻译**: Qwen3-4B (可选 1.7B/0.6B)
                 - **TTS**: Qwen3-TTS-12Hz-1.7B
                 """)
         

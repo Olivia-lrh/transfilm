@@ -54,10 +54,10 @@ class Pipeline:
         # 翻译引擎
         trans_config = self.config.get("models.translation", {})
         self.translation_engine = TranslationEngine(
-            model_name=trans_config.get("model_name", "openbmb/MiniCPM-o-2_6"),
+            model_name=trans_config.get("model_name", "Qwen/Qwen3-4B"),
             device=trans_config.get("device", "cuda:0"),
             dtype=trans_config.get("dtype", "bfloat16"),
-            attn_implementation=trans_config.get("attn_implementation", "sdpa"),
+            attn_implementation=trans_config.get("attn_implementation"),
             max_new_tokens=trans_config.get("max_new_tokens", 2048),
             sampling=trans_config.get("sampling", False),
         )

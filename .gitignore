@@ -205,3 +205,15 @@ cython_debug/
 marimo/_static/
 marimo/_lsp/
 __marimo__/
+
+# Transfilm specific
+cache/
+outputs/
+models/
+*.mp4
+*.mkv
+*.avi
+*.mov
+*.webm
+*.wav
+*.mp3

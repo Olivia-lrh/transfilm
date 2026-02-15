@@ -1,0 +1,71 @@
+[build-system]
+requires = ["setuptools>=45", "wheel", "setuptools_scm>=6.2"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "transfilm"
+version = "1.0.0"
+description = "生产级AI视频配音系统 - 使用Qwen3-ASR、Qwen3-TTS和MiniCPM-o"
+readme = "README.md"
+requires-python = ">=3.8"
+license = {text = "MIT"}
+authors = [
+    {name = "Olivia-lrh"}
+]
+keywords = ["video", "dubbing", "translation", "speech-recognition", "text-to-speech", "ai"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.8",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+]
+
+dependencies = [
+    "torch>=2.1.0",
+    "transformers>=4.45.0",
+    "qwen-asr>=0.1.0",
+    "qwen-tts>=0.1.0",
+    "soundfile>=0.12.0",
+    "librosa>=0.10.0",
+    "numpy>=1.24.0",
+    "gradio>=4.0.0",
+    "huggingface-hub>=0.20.0",
+    "modelscope>=1.9.0",
+    "pyyaml>=6.0",
+    "tqdm>=4.65.0",
+    "requests>=2.31.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0.0",
+    "pytest-cov>=4.0.0",
+    "black>=23.0.0",
+    "flake8>=6.0.0",
+    "mypy>=1.0.0",
+]
+
+[project.scripts]
+transfilm = "cli:main"
+
+[project.urls]
+Homepage = "https://github.com/Olivia-lrh/transfilm"
+Repository = "https://github.com/Olivia-lrh/transfilm"
+Issues = "https://github.com/Olivia-lrh/transfilm/issues"
+
+[tool.setuptools]
+packages = ["transfilm"]
+
+[tool.black]
+line-length = 100
+target-version = ['py38', 'py39', 'py310', 'py311']
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]

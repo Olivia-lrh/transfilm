@@ -1,0 +1,26 @@
+version: '3.8'
+
+services:
+  transfilm:
+    build: .
+    image: transfilm:latest
+    container_name: transfilm
+    runtime: nvidia
+    environment:
+      - NVIDIA_VISIBLE_DEVICES=all
+      - TRANSFILM_MODELS_ASR_DEVICE=cuda:0
+      - TRANSFILM_MODELS_TTS_DEVICE=cuda:0
+      - TRANSFILM_MODELS_TRANSLATION_DEVICE=cuda:0
+    ports:
+      - "7860:7860"
+    volumes:
+      - ./outputs:/app/outputs
+      - ./cache:/app/cache
+      - ./models:/app/models
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]

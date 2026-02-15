@@ -1,0 +1,125 @@
+# Transfilm 默认配置文件
+
+# 模型配置
+models:
+  # ASR模型
+  asr:
+    model_name: "Qwen/Qwen3-ASR-1.7B"
+    forced_aligner: "Qwen/Qwen3-ForcedAligner-0.6B"
+    device: "cuda:0"  # cuda:0, cpu, auto
+    dtype: "bfloat16"  # bfloat16, float16, float32
+    max_inference_batch_size: 32
+    max_new_tokens: 256
+    
+  # TTS模型
+  tts:
+    # 选择模式: custom_voice 或 voice_clone
+    mode: "custom_voice"  # custom_voice, voice_clone
+    custom_voice_model: "Qwen/Qwen3-TTS-12Hz-1.7B-CustomVoice"
+    voice_clone_model: "Qwen/Qwen3-TTS-12Hz-1.7B-Base"
+    device: "cuda:0"
+    dtype: "bfloat16"
+    attn_implementation: "sdpa"  # sdpa, flash_attention_2
+    # CustomVoice模式参数
+    default_speaker: "Vivian"  # Vivian, Serena, Ryan等
+    default_instruct: ""  # 语气指令，如"用开心的语气说"
+    # VoiceClone模式参数
+    x_vector_only_mode: false
+    
+  # 翻译模型
+  translation:
+    model_name: "openbmb/MiniCPM-o-2_6"
+    device: "cuda:0"
+    dtype: "bfloat16"
+    attn_implementation: "sdpa"
+    max_new_tokens: 2048
+    sampling: false
+
+# 下载配置
+download:
+  # 优先使用的源: huggingface 或 modelscope
+  source: "huggingface"
+  # 本地缓存目录（留空使用默认）
+  cache_dir: ""
+  # 是否显示下载进度
+  show_progress: true
+  # 断点续传
+  resume_download: true
+
+# 管道配置
+pipeline:
+  # 中间结果缓存目录
+  cache_dir: "./cache"
+  # 是否启用中间结果缓存
+  enable_cache: true
+  # 内存优化：按需加载卸载模型
+  sequential_model_loading: true
+  # 每个阶段后清理GPU缓存
+  clear_cache_between_stages: true
+  
+# 音频处理配置
+audio:
+  # 输出采样率
+  sample_rate: 16000
+  # 输出声道数
+  channels: 1
+  # 音频格式
+  format: "wav"
+  # 时间拉伸方法: librosa 或 ffmpeg
+  time_stretch_method: "librosa"
+  
+# 视频处理配置
+video:
+  # 输出视频编码器
+  video_codec: "libx264"
+  # 输出音频编码器
+  audio_codec: "aac"
+  # 视频质量(CRF值，越低质量越高)
+  crf: 23
+  # 音频比特率
+  audio_bitrate: "192k"
+  # 支持的输入格式
+  supported_formats: ["mp4", "mkv", "avi", "mov", "webm"]
+
+# 语言配置
+languages:
+  # 支持的ASR语言
+  asr_languages: ["Chinese", "English", "Japanese", "Korean"]
+  # 支持的TTS语言
+  tts_languages: ["Chinese", "English"]
+  # 默认源语言(null表示自动检测)
+  default_source: null
+  # 默认目标语言
+  default_target: "Chinese"
+
+# TTS说话人配置
+speakers:
+  custom_voice:
+    - name: "Vivian"
+      description: "女声-活泼"
+      language: "Chinese"
+    - name: "Serena"
+      description: "女声-温柔"
+      language: "Chinese"
+    - name: "Ryan"
+      description: "男声-沉稳"
+      language: "Chinese"
+    - name: "Emma"
+      description: "女声-优雅"
+      language: "English"
+    - name: "Jack"
+      description: "男声-阳光"
+      language: "English"
+
+# 日志配置
+logging:
+  level: "INFO"  # DEBUG, INFO, WARNING, ERROR
+  format: "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+  file: ""  # 留空则只输出到控制台
+
+# Web UI配置
+webui:
+  host: "127.0.0.1"
+  port: 7860
+  share: false
+  debug: false

@@ -21,6 +21,16 @@ def cmd_dub(args):
     # 加载配置
     config = Config(args.config)
     
+    # 应用命令行参数覆盖配置
+    if hasattr(args, 'per_speaker_clone') and args.per_speaker_clone is not None:
+        config.set("models.tts.per_speaker_clone", args.per_speaker_clone)
+    
+    if hasattr(args, 'subtitle') and args.subtitle is not None:
+        config.set("subtitle.enabled", args.subtitle)
+    
+    if hasattr(args, 'bilingual_subtitle') and args.bilingual_subtitle:
+        config.set("subtitle.bilingual", True)
+    
     # 设置日志
     log_level = args.log_level or config.get("logging.level", "INFO")
     setup_logging(level=log_level)
@@ -46,10 +56,18 @@ def cmd_dub(args):
             tts_speaker=args.speaker,
             progress_callback=progress_callback,
             cache_dir=args.cache_dir,
+            num_speakers=args.num_speakers if hasattr(args, 'num_speakers') else None,
         )
         
         print(f"\n✅ 处理完成！")
         print(f"输出文件: {output_path}")
+        
+        # 如果生成了字幕，显示字幕文件路径
+        if config.get("subtitle.enabled", True):
+            subtitle_path = os.path.splitext(output_path)[0] + ".srt"
+            if os.path.exists(subtitle_path):
+                print(f"字幕文件: {subtitle_path}")
+        
         return 0
         
     except Exception as e:
@@ -174,6 +192,13 @@ def main():
     dub_parser.add_argument("--source-lang", type=str, default=None, help="源语言（自动检测）")
     dub_parser.add_argument("--speaker", type=str, help="TTS说话人")
     dub_parser.add_argument("--cache-dir", type=str, help="缓存目录")
+    # 新增参数
+    dub_parser.add_argument("--num-speakers", type=int, default=None, help="说话人数量提示（0或None表示自动检测）")
+    dub_parser.add_argument("--per-speaker-clone", action="store_true", default=None, dest="per_speaker_clone", help="启用每说话人音色克隆")
+    dub_parser.add_argument("--no-per-speaker-clone", action="store_false", dest="per_speaker_clone", help="禁用每说话人音色克隆")
+    dub_parser.add_argument("--subtitle", action="store_true", default=None, dest="subtitle", help="生成字幕")
+    dub_parser.add_argument("--no-subtitle", action="store_false", dest="subtitle", help="不生成字幕")
+    dub_parser.add_argument("--bilingual-subtitle", action="store_true", default=False, help="生成双语字幕")
     
     # download 命令
     download_parser = subparsers.add_parser("download", help="下载模型")

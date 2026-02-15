@@ -297,12 +297,10 @@ def create_ui():
                 - Speaker Diarization: Resemblyzer
                 """)
         
-        return app
-                - **TTS**: Qwen3-TTS-12Hz-1.7B
-                """)
-        
         gr.Markdown("---")
         gr.Markdown("© 2026 Transfilm | [GitHub](https://github.com/Olivia-lrh/transfilm)")
+        
+        return app
     
     return app
 

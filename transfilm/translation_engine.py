@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 """
-翻译引擎 - 使用MiniCPM-o官方API
+翻译引擎 - 使用Qwen3文本模型
 """
 
 import logging
@@ -12,24 +12,24 @@ logger = logging.getLogger(__name__)
 
 
 class TranslationEngine:
-    """翻译引擎 - 基于MiniCPM-o"""
+    """翻译引擎 - 基于Qwen3"""
     
     def __init__(
         self,
-        model_name: str = "openbmb/MiniCPM-o-2_6",
+        model_name: str = "Qwen/Qwen3-4B",
         device: str = "cuda:0",
         dtype: str = "bfloat16",
-        attn_implementation: str = "sdpa",
+        attn_implementation: Optional[str] = None,
         max_new_tokens: int = 2048,
         sampling: bool = False,
     ):
         """初始化翻译引擎
         
         Args:
-            model_name: 模型名称
+            model_name: 模型名称 (支持 Qwen/Qwen3-4B, Qwen/Qwen3-1.7B, Qwen/Qwen3-0.6B)
             device: 计算设备
             dtype: 数据类型
-            attn_implementation: 注意力实现方式
+            attn_implementation: 注意力实现方式 (可选，不影响Qwen3)
             max_new_tokens: 最大生成token数
             sampling: 是否使用采样
         """
@@ -60,22 +60,20 @@ class TranslationEngine:
             return
         
         try:
-            from transformers import AutoModel, AutoTokenizer
+            from transformers import AutoModelForCausalLM, AutoTokenizer
             
             logger.info(f"正在加载翻译模型: {self.model_name}")
             
-            # 使用官方API加载模型
-            self.model = AutoModel.from_pretrained(
+            # 使用标准 AutoModelForCausalLM 加载模型
+            self.model = AutoModelForCausalLM.from_pretrained(
                 self.model_name,
-                trust_remote_code=True,
-                attn_implementation=self.attn_implementation,
                 torch_dtype=self.dtype,
+                device_map=self.device,
             )
-            self.model = self.model.eval().cuda()
+            self.model = self.model.eval()
             
             self.tokenizer = AutoTokenizer.from_pretrained(
                 self.model_name,
-                trust_remote_code=True,
             )
             
             logger.info("翻译模型加载成功")
@@ -127,15 +125,36 @@ class TranslationEngine:
             
             logger.debug(f"翻译提示: {prompt}")
             
-            # 使用官方API进行翻译
-            msgs = [{'role': 'user', 'content': prompt}]
+            # 使用 Qwen3 标准 API 进行翻译
+            messages = [{"role": "user", "content": prompt}]
             
-            answer = self.model.chat(
-                msgs=msgs,
-                tokenizer=self.tokenizer,
-                max_new_tokens=self.max_new_tokens,
-                sampling=self.sampling,
+            # 应用聊天模板，关闭思考模式以提升翻译速度
+            text_input = self.tokenizer.apply_chat_template(
+                messages,
+                tokenize=False,
+                add_generation_prompt=True,
+                enable_thinking=False,  # 关闭思考模式以减少延迟
             )
+            
+            # 编码输入
+            inputs = self.tokenizer([text_input], return_tensors="pt")
+            
+            # 将输入移至设备 (device_map会自动处理模型设备，我们只需将输入移至正确设备)
+            # 从模型获取设备
+            model_device = next(self.model.parameters()).device
+            inputs = {k: v.to(model_device) for k, v in inputs.items()}
+            
+            # 生成翻译
+            with torch.no_grad():
+                output_ids = self.model.generate(
+                    **inputs,
+                    max_new_tokens=self.max_new_tokens,
+                    do_sample=self.sampling,
+                )
+            
+            # 仅解码生成的部分（跳过输入部分）
+            generated_ids = output_ids[0][len(inputs['input_ids'][0]):]
+            answer = self.tokenizer.decode(generated_ids, skip_special_tokens=True)
             
             logger.debug(f"翻译结果: {answer}")
             return answer

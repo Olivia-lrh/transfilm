@@ -3,7 +3,7 @@
 """
 Transfilm - 生产级AI视频配音系统
 
-使用Qwen3-ASR、Qwen3-TTS和MiniCPM-o实现完整的视频翻译和配音管道
+使用Qwen3-ASR、Qwen3-TTS和Qwen3实现完整的视频翻译和配音管道
 """
 
 __version__ = "1.0.0"

@@ -6,7 +6,7 @@
 [![Python](https://img.shields.io/badge/python-3.8+-blue.svg)](https://www.python.org/)
 [![PyTorch](https://img.shields.io/badge/pytorch-2.1+-red.svg)](https://pytorch.org/)
 
-生产级AI视频翻译和配音管道，使用Qwen3-ASR、Qwen3-TTS和MiniCPM-o
+生产级AI视频翻译和配音管道，使用Qwen3-ASR、Qwen3-TTS和Qwen3
 
 </div>
 
@@ -35,7 +35,7 @@
 
 - 🤖 **官方API**: 使用官方模型API
   - **Qwen3-ASR**: 准确的语音识别和强制对齐
-  - **MiniCPM-o**: 高质量多语言翻译
+  - **Qwen3**: 高质量多语言翻译 (支持119种语言)
   - **Qwen3-TTS**: 自然的语音合成（支持音色克隆）
 
 - 🎨 **双TTS模式**:
@@ -44,6 +44,7 @@
 
 - 🚀 **性能优化**:
   - 低显存优化（支持8GB+ VRAM）
+  - 统一Qwen生态系统（ASR、TTS、翻译全部使用Qwen）
   - 按需模型加载/卸载
   - Flash Attention 2支持
   - 批处理优化
@@ -81,16 +82,22 @@
 ## 💾 硬件要求
 
 ### 推荐配置
-- **GPU**: NVIDIA GPU, 16GB+ VRAM (RTX 4090, A100等)
+- **GPU**: NVIDIA GPU, 12GB+ VRAM (RTX 4070, A4000等)
 - **CPU**: 8核+
 - **内存**: 32GB+
-- **存储**: 100GB+ (模型约50GB)
+- **存储**: 100GB+ (模型约40GB)
 
-### 最低配置
+### 最低配置 (使用Qwen3-4B)
 - **GPU**: NVIDIA GPU, 8GB VRAM (RTX 3060等)
 - **CPU**: 4核+
 - **内存**: 16GB+
 - **存储**: 100GB+
+
+### 超低显存配置 (使用Qwen3-1.7B/0.6B)
+- **GPU**: NVIDIA GPU, 4GB+ VRAM
+- **CPU**: 4核+
+- **内存**: 16GB+
+- **存储**: 80GB+
 
 ### CPU模式
 - 支持纯CPU运行，但速度较慢（不推荐）
@@ -243,7 +250,7 @@ models:
     device: "cuda:0"
   
   translation:
-    model_name: "openbmb/MiniCPM-o-2_6"
+    model_name: "Qwen/Qwen3-4B"  # 或 Qwen/Qwen3-1.7B, Qwen/Qwen3-0.6B
     device: "cuda:0"
 
 pipeline:
@@ -287,11 +294,20 @@ models:
     attn_implementation: "sdpa"  # 使用SDPA而非Flash Attention
   
   translation:
+    model_name: "Qwen/Qwen3-1.7B"  # 使用较小的模型
     dtype: "float16"
 
 pipeline:
   sequential_model_loading: true  # 必须启用
   clear_cache_between_stages: true  # 必须启用
+```
+
+对于4GB显存的GPU：
+
+```yaml
+models:
+  translation:
+    model_name: "Qwen/Qwen3-0.6B"  # 使用超小模型
 ```
 
 ## 📖 使用文档
@@ -485,7 +501,7 @@ mypy transfilm/
 
 - [Qwen3-ASR](https://github.com/QwenLM/Qwen3-ASR) - 语音识别
 - [Qwen3-TTS](https://github.com/QwenLM/Qwen3-TTS) - 语音合成
-- [MiniCPM-o](https://github.com/OpenBMB/MiniCPM-o) - 文本翻译
+- [Qwen3](https://github.com/QwenLM/Qwen3) - 文本翻译
 - [FFmpeg](https://ffmpeg.org/) - 音视频处理
 - [Gradio](https://gradio.app/) - Web UI
 

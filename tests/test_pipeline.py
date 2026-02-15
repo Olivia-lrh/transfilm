@@ -21,6 +21,9 @@ def test_pipeline_init():
     assert pipeline.tts_engine is not None
     assert pipeline.audio_processor is not None
     assert pipeline.video_processor is not None
+    assert pipeline.vad_engine is not None
+    assert pipeline.speaker_diarization is not None
+    assert pipeline.subtitle_generator is not None
 
 
 def test_pipeline_init_without_config():
@@ -29,7 +32,7 @@ def test_pipeline_init_without_config():
     
     assert pipeline.config is not None
     assert pipeline.current_stage == 0
-    assert pipeline.total_stages == 6
+    assert pipeline.total_stages == 8  # 从6个阶段升级到8个阶段
 
 
 def test_pipeline_components():
@@ -42,11 +45,58 @@ def test_pipeline_components():
     assert pipeline.tts_engine is not None
     assert pipeline.audio_processor is not None
     assert pipeline.video_processor is not None
+    # 新组件
+    assert pipeline.vad_engine is not None
+    assert pipeline.speaker_diarization is not None
+    assert pipeline.subtitle_generator is not None
 
 
 def test_pipeline_progress_callback():
     """测试进度回调"""
     pipeline = Pipeline()
+    
+    # Mock回调函数
+    callback = Mock()
+    
+    # 测试进度更新
+    pipeline._update_progress(1, "测试阶段", callback)
+    
+    # 验证回调被调用
+    callback.assert_called_once_with(1, 8, "测试阶段")
+    assert pipeline.current_stage == 1
+
+
+def test_pipeline_vad_disabled():
+    """测试VAD禁用时的初始化"""
+    config = Config()
+    config.set("vad.enabled", False)
+    
+    pipeline = Pipeline(config)
+    
+    # VAD应该是None
+    assert pipeline.vad_engine is None
+
+
+def test_pipeline_speaker_diarization_disabled():
+    """测试说话人分离禁用时的初始化"""
+    config = Config()
+    config.set("speaker_diarization.enabled", False)
+    
+    pipeline = Pipeline(config)
+    
+    # 说话人分离应该是None
+    assert pipeline.speaker_diarization is None
+
+
+def test_pipeline_subtitle_disabled():
+    """测试字幕生成禁用时的初始化"""
+    config = Config()
+    config.set("subtitle.enabled", False)
+    
+    pipeline = Pipeline(config)
+    
+    # 字幕生成器应该是None
+    assert pipeline.subtitle_generator is None
     
     # Mock回调函数
     callback = Mock()

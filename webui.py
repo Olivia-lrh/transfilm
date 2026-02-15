@@ -44,6 +44,10 @@ def process_video(
     source_language,
     tts_mode,
     tts_speaker,
+    num_speakers,
+    per_speaker_clone,
+    generate_subtitle,
+    bilingual_subtitle,
     progress=gr.Progress(),
 ):
     """处理视频"""
@@ -58,9 +62,14 @@ def process_video(
         input_name = os.path.splitext(os.path.basename(input_video))[0]
         output_video = os.path.join(output_dir, f"{input_name}_dubbed.mp4")
         
-        # 更新TTS模式
+        # 更新配置
         config.set("models.tts.mode", tts_mode)
-        pipeline._init_components()  # 重新初始化组件
+        config.set("models.tts.per_speaker_clone", per_speaker_clone)
+        config.set("subtitle.enabled", generate_subtitle)
+        config.set("subtitle.bilingual", bilingual_subtitle)
+        
+        # 重新初始化组件
+        pipeline._init_components()
         
         # 进度回调
         def progress_callback(stage, total, message):
@@ -74,9 +83,16 @@ def process_video(
             source_language=source_language if source_language != "自动检测" else None,
             tts_speaker=tts_speaker if tts_speaker != "默认" else None,
             progress_callback=progress_callback,
+            num_speakers=num_speakers if num_speakers > 0 else None,
         )
         
-        return result, f"✅ 处理完成！\n输出: {result}"
+        # 检查字幕文件
+        subtitle_path = os.path.splitext(result)[0] + ".srt"
+        subtitle_msg = ""
+        if os.path.exists(subtitle_path):
+            subtitle_msg = f"\n字幕文件: {subtitle_path}"
+        
+        return result, f"✅ 处理完成！\n输出: {result}{subtitle_msg}"
         
     except Exception as e:
         logger.error(f"处理失败: {e}", exc_info=True)
@@ -118,8 +134,8 @@ def download_model(model_key):
 def create_ui():
     """创建UI"""
     with gr.Blocks(title="Transfilm - AI视频配音系统") as app:
-        gr.Markdown("# 🎬 Transfilm - AI视频配音系统")
-        gr.Markdown("使用Qwen3-ASR、Qwen3-TTS和MiniCPM-o进行高质量视频翻译配音")
+        gr.Markdown("# 🎬 Transfilm - AI视频配音系统 (8阶段增强版)")
+        gr.Markdown("使用Qwen3-ASR、Qwen3-TTS和MiniCPM-o进行高质量视频翻译配音，支持说话人分离和智能翻译")
         
         with gr.Tabs():
             # 主要功能标签页
@@ -154,6 +170,30 @@ def create_ui():
                             label="说话人",
                         )
                         
+                        # 新增控件
+                        with gr.Accordion("高级选项", open=False):
+                            num_speakers = gr.Number(
+                                label="说话人数量提示",
+                                value=0,
+                                precision=0,
+                                info="0表示自动检测",
+                            )
+                            per_speaker_clone = gr.Checkbox(
+                                label="每说话人音色克隆",
+                                value=config.get("models.tts.per_speaker_clone", True),
+                                info="为每个说话人克隆独立的音色",
+                            )
+                            generate_subtitle = gr.Checkbox(
+                                label="生成字幕",
+                                value=config.get("subtitle.enabled", True),
+                                info="生成SRT字幕文件",
+                            )
+                            bilingual_subtitle = gr.Checkbox(
+                                label="双语字幕",
+                                value=config.get("subtitle.bilingual", False),
+                                info="包含源语言和目标语言",
+                            )
+                        
                         process_btn = gr.Button("开始处理", variant="primary", size="lg")
                     
                     with gr.Column():
@@ -162,7 +202,17 @@ def create_ui():
                 
                 process_btn.click(
                     fn=process_video,
-                    inputs=[input_video, target_language, source_language, tts_mode, tts_speaker],
+                    inputs=[
+                        input_video, 
+                        target_language, 
+                        source_language, 
+                        tts_mode, 
+                        tts_speaker,
+                        num_speakers,
+                        per_speaker_clone,
+                        generate_subtitle,
+                        bilingual_subtitle,
+                    ],
                     outputs=[output_video, output_message],
                 )
             
@@ -202,37 +252,55 @@ def create_ui():
                 首次使用前，请在"模型下载"标签页下载所需模型。
                 
                 ### 2. 上传视频
-                支持格式：MP4, MKV, AVI, MOV, WebM
+                支持常见视频格式：mp4, mkv, avi, mov, webm
                 
                 ### 3. 选择语言
-                - **源语言**: 视频中的原始语言（选择"自动检测"让系统自动识别）
-                - **目标语言**: 想要配音的目标语言
+                - 源语言：可选择自动检测，或指定源语言以提高准确度
+                - 目标语言：选择配音的目标语言
                 
-                ### 4. 选择TTS模式
-                - **custom_voice**: 使用预设的说话人音色（Vivian、Ryan等）
-                - **voice_clone**: 克隆原视频中的音色
+                ### 4. TTS模式
+                - **自定义音色 (custom_voice)**: 使用预设的说话人音色
+                - **音色克隆 (voice_clone)**: 克隆原视频中的音色
                 
-                ### 5. 处理视频
-                点击"开始处理"，系统将自动完成以下步骤：
-                1. 提取音频
-                2. 语音识别
-                3. 文本翻译
-                4. 语音合成
-                5. 音频组装
-                6. 视频合并
+                ### 5. 高级选项 (新功能)
+                - **说话人数量提示**: 可以指定视频中的说话人数量，或设为0自动检测
+                - **每说话人音色克隆**: 为每个说话人分别克隆音色，保持说话人差异
+                - **生成字幕**: 自动生成SRT字幕文件
+                - **双语字幕**: 在字幕中同时显示原文和译文
                 
-                ## 硬件要求
-                - **推荐**: NVIDIA GPU (16GB+ VRAM)
-                - **最低**: NVIDIA GPU (8GB VRAM) 或 CPU
+                ## 8阶段增强管道
+                
+                1. **提取音频**: 从视频中提取音频轨道
+                2. **VAD语音活动检测**: 检测和分割语音片段
+                3. **ASR转录与说话人分离**: 语音识别 + 基于音色的说话人分类 + LLM语义验证
+                4. **智能翻译**: 考虑语速的字符数控制翻译，确保译文长度与原音频匹配
+                5. **每说话人音色克隆**: 为每个说话人选择最佳参考音频并克隆音色
+                6. **组装音频**: 将合成的音频片段组装回完整音轨
+                7. **合并视频**: 将新音轨与原视频合并
+                8. **生成字幕**: 可选的字幕文件生成
+                
+                ## 特点
+                
+                - ✅ 精准的说话人分离
+                - ✅ 语义验证的说话人边界优化
+                - ✅ 字符数控制的智能翻译
+                - ✅ 每说话人独立音色克隆
+                - ✅ 自动字幕生成（支持双语）
+                - ✅ 适配8GB显存的渐进式模型加载
                 
                 ## 技术栈
-                - **ASR**: Qwen3-ASR-1.7B
-                - **翻译**: MiniCPM-o-2_6
-                - **TTS**: Qwen3-TTS-12Hz-1.7B
+                
+                - ASR: Qwen3-ASR-1.7B + Qwen3-ForcedAligner-0.6B
+                - Translation: MiniCPM-o-2_6
+                - TTS: Qwen3-TTS-12Hz-1.7B (CustomVoice + Base)
+                - VAD: Silero VAD
+                - Speaker Diarization: Resemblyzer
                 """)
         
         gr.Markdown("---")
         gr.Markdown("© 2026 Transfilm | [GitHub](https://github.com/Olivia-lrh/transfilm)")
+        
+    return app
     
     return app
 

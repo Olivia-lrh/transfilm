@@ -303,3 +303,45 @@ class AudioProcessor:
         self.save_audio(output_audio, output_path, sample_rate)
         logger.info(f"音频连接完成: {output_path}")
         return output_path
+    
+    def extract_audio_segment(
+        self,
+        audio_path: str,
+        start_time: float,
+        end_time: float,
+        output_path: Optional[str] = None,
+    ) -> Tuple[np.ndarray, int]:
+        """从音频文件提取指定时间段
+        
+        Args:
+            audio_path: 音频文件路径
+            start_time: 开始时间（秒）
+            end_time: 结束时间（秒）
+            output_path: 输出路径（可选）
+        
+        Returns:
+            (音频数组, 采样率)
+        """
+        if not os.path.exists(audio_path):
+            raise FileNotFoundError(f"音频文件不存在: {audio_path}")
+        
+        # 读取音频
+        audio, sr = self.load_audio(audio_path)
+        
+        # 计算样本索引
+        start_sample = int(start_time * sr)
+        end_sample = int(end_time * sr)
+        
+        # 确保索引在有效范围内
+        start_sample = max(0, start_sample)
+        end_sample = min(len(audio), end_sample)
+        
+        # 提取片段
+        segment = audio[start_sample:end_sample]
+        
+        # 如果指定了输出路径，保存文件
+        if output_path:
+            self.save_audio(segment, output_path, sr)
+            logger.debug(f"提取音频片段: {start_time:.2f}s - {end_time:.2f}s -> {output_path}")
+        
+        return segment, sr

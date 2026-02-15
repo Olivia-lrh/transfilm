@@ -1,7 +1,7 @@
 # Transfilm Project - Implementation Summary
 
 ## Overview
-Complete rewrite of the transfilm project from scratch, creating a production-ready AI video dubbing pipeline using official APIs from QwenLM/Qwen3-ASR, QwenLM/Qwen3-TTS, and OpenBMB/MiniCPM-o.
+Complete rewrite of the transfilm project from scratch, creating a production-ready AI video dubbing pipeline using official APIs from QwenLM/Qwen3-ASR, QwenLM/Qwen3-TTS, and QwenLM/Qwen3.
 
 ## Files Created (29 files)
 
@@ -18,7 +18,7 @@ Complete rewrite of the transfilm project from scratch, creating a production-re
 8. **transfilm/model_downloader.py** - HuggingFace/ModelScope model download manager
 9. **transfilm/utils.py** - Shared utilities
 10. **transfilm/asr_engine.py** - Qwen3-ASR wrapper with official API
-11. **transfilm/translation_engine.py** - MiniCPM-o translation with official API
+11. **transfilm/translation_engine.py** - Qwen3 translation with official API
 12. **transfilm/tts_engine.py** - Qwen3-TTS wrapper with official API
 13. **transfilm/audio_processor.py** - FFmpeg audio operations
 14. **transfilm/video_processor.py** - FFmpeg video operations
@@ -52,7 +52,7 @@ Complete rewrite of the transfilm project from scratch, creating a production-re
 6-stage pipeline:
 1. Video Preprocessing (FFmpeg audio/video separation)
 2. ASR (Qwen3-ASR with timestamps)
-3. Translation (MiniCPM-o)
+3. Translation (Qwen3)
 4. TTS (Qwen3-TTS custom voice or voice clone)
 5. Audio Assembly (timestamp-based concatenation)
 6. Video Merge (reassemble with translated audio)
@@ -67,11 +67,14 @@ model = Qwen3ASRModel.from_pretrained(...)
 results = model.transcribe(audio, language, return_time_stamps=True)
 ```
 
-**MiniCPM-o:**
+**Qwen3:**
 ```python
-from transformers import AutoModel, AutoTokenizer
-model = AutoModel.from_pretrained('openbmb/MiniCPM-o-2_6', ...)
-answer = model.chat(msgs, tokenizer, ...)
+from transformers import AutoModelForCausalLM, AutoTokenizer
+model = AutoModelForCausalLM.from_pretrained('Qwen/Qwen3-4B', torch_dtype=torch.bfloat16, device_map='cuda:0')
+tokenizer = AutoTokenizer.from_pretrained('Qwen/Qwen3-4B')
+text_input = tokenizer.apply_chat_template(messages, tokenize=False, add_generation_prompt=True, enable_thinking=False)
+inputs = tokenizer([text_input], return_tensors="pt")
+output_ids = model.generate(**inputs, max_new_tokens=2048)
 ```
 
 **Qwen3-TTS:**

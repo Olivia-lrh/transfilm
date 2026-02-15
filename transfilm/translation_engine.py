@@ -153,7 +153,7 @@ class TranslationEngine:
                 )
             
             # 仅解码生成的部分（跳过输入部分）
-            generated_ids = output_ids[0][len(inputs.input_ids[0]):]
+            generated_ids = output_ids[0][len(inputs['input_ids'][0]):]
             answer = self.tokenizer.decode(generated_ids, skip_special_tokens=True)
             
             logger.debug(f"翻译结果: {answer}")

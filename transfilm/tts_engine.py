@@ -314,3 +314,157 @@ class TTSEngine:
         
         logger.info(f"批量合成完成")
         return results
+    
+    def select_reference_audio(
+        self,
+        audio_segments: List,
+        min_duration: float = 3.0,
+        max_duration: float = 10.0,
+        max_segments_to_concat: int = 3,
+    ) -> Tuple[np.ndarray, float, float]:
+        """选择最佳参考音频片段
+        
+        Args:
+            audio_segments: 音频片段列表（带有audio_array, start_time, end_time属性）
+            min_duration: 最小参考音频时长（秒）
+            max_duration: 最大参考音频时长（秒）
+            max_segments_to_concat: 如果没有足够长的单个片段，最多拼接的片段数
+        
+        Returns:
+            (参考音频数组, 开始时间, 结束时间)
+        """
+        if not audio_segments:
+            raise ValueError("没有可用的音频片段")
+        
+        # 评估每个片段的质量
+        scored_segments = []
+        for seg in audio_segments:
+            audio = seg.audio_array if hasattr(seg, 'audio_array') else seg
+            duration = seg.duration() if hasattr(seg, 'duration') else (len(audio) / 16000)
+            
+            # 跳过太短或太长的片段
+            if duration < 0.5 or duration > max_duration * 2:
+                continue
+            
+            # 计算信噪比（简单的能量评估）
+            snr = self._estimate_snr(audio)
+            
+            # 评分：优先选择3-10秒的片段，其次看信噪比
+            score = 0.0
+            
+            # 时长得分（3-10秒最优）
+            if min_duration <= duration <= max_duration:
+                duration_score = 1.0
+            elif duration < min_duration:
+                duration_score = duration / min_duration * 0.5
+            else:
+                duration_score = max_duration / duration * 0.5
+            
+            score += duration_score * 10.0
+            
+            # 信噪比得分
+            score += snr * 5.0
+            
+            scored_segments.append((score, seg, duration))
+        
+        if not scored_segments:
+            # 如果没有合适的片段，使用第一个
+            seg = audio_segments[0]
+            audio = seg.audio_array if hasattr(seg, 'audio_array') else seg
+            start_time = seg.start_time if hasattr(seg, 'start_time') else 0.0
+            end_time = seg.end_time if hasattr(seg, 'end_time') else (len(audio) / 16000)
+            return audio, start_time, end_time
+        
+        # 按得分排序
+        scored_segments.sort(reverse=True, key=lambda x: x[0])
+        
+        # 选择最佳片段
+        best_segment = scored_segments[0][1]
+        best_duration = scored_segments[0][2]
+        
+        # 如果最佳片段太短，尝试拼接多个高分片段
+        if best_duration < min_duration and len(scored_segments) > 1:
+            logger.info(f"最佳片段时长 {best_duration:.2f}s < {min_duration}s，尝试拼接多个片段")
+            
+            # 选择前N个高分片段
+            segments_to_concat = []
+            total_duration = 0.0
+            
+            for score, seg, duration in scored_segments[:max_segments_to_concat]:
+                segments_to_concat.append(seg)
+                total_duration += duration
+                if total_duration >= min_duration:
+                    break
+            
+            # 拼接音频
+            if len(segments_to_concat) > 1:
+                import librosa
+                audio_arrays = []
+                for seg in segments_to_concat:
+                    audio = seg.audio_array if hasattr(seg, 'audio_array') else seg
+                    audio_arrays.append(audio)
+                
+                # 拼接
+                combined_audio = np.concatenate(audio_arrays)
+                
+                # 限制最大长度
+                max_samples = int(max_duration * 16000)
+                if len(combined_audio) > max_samples:
+                    combined_audio = combined_audio[:max_samples]
+                
+                start_time = segments_to_concat[0].start_time if hasattr(segments_to_concat[0], 'start_time') else 0.0
+                end_time = start_time + len(combined_audio) / 16000
+                
+                logger.info(f"拼接了 {len(segments_to_concat)} 个片段，总时长 {len(combined_audio)/16000:.2f}s")
+                return combined_audio, start_time, end_time
+        
+        # 返回最佳单个片段
+        audio = best_segment.audio_array if hasattr(best_segment, 'audio_array') else best_segment
+        start_time = best_segment.start_time if hasattr(best_segment, 'start_time') else 0.0
+        end_time = best_segment.end_time if hasattr(best_segment, 'end_time') else (len(audio) / 16000)
+        
+        logger.info(f"选择参考音频: 时长={end_time - start_time:.2f}s, 得分={scored_segments[0][0]:.2f}")
+        return audio, start_time, end_time
+    
+    def _estimate_snr(self, audio: np.ndarray) -> float:
+        """估计信噪比（简化版本）
+        
+        Args:
+            audio: 音频数组
+        
+        Returns:
+            信噪比估计值（0-1）
+        """
+        if len(audio) == 0:
+            return 0.0
+        
+        # 计算短时能量
+        frame_size = 400  # 25ms at 16kHz
+        hop_size = 160    # 10ms at 16kHz
+        
+        frame_energies = []
+        for i in range(0, len(audio) - frame_size, hop_size):
+            frame = audio[i:i+frame_size]
+            energy = np.sqrt(np.mean(frame**2))
+            frame_energies.append(energy)
+        
+        if not frame_energies:
+            return 0.0
+        
+        frame_energies = np.array(frame_energies)
+        
+        # 使用能量的高百分位数作为信号强度
+        signal_energy = np.percentile(frame_energies, 75)
+        
+        # 使用能量的低百分位数作为噪声强度
+        noise_energy = np.percentile(frame_energies, 25)
+        
+        # 计算SNR（归一化到0-1）
+        if noise_energy > 0:
+            snr_db = 20 * np.log10(signal_energy / (noise_energy + 1e-8))
+            # 将SNR从dB转换为0-1范围（假设0-30dB）
+            snr_normalized = np.clip(snr_db / 30.0, 0.0, 1.0)
+        else:
+            snr_normalized = 1.0
+        
+        return snr_normalized

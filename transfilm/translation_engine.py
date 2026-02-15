@@ -178,3 +178,125 @@ class TranslationEngine:
         
         logger.info(f"批量翻译完成")
         return results
+    
+    def translate_with_length_control(
+        self,
+        text: str,
+        target_language: str,
+        target_duration: float,
+        source_language: Optional[str] = None,
+        speaking_rate: Optional[float] = None,
+        tolerance: float = 0.2,
+        max_rounds: int = 2,
+    ) -> str:
+        """使用字符数控制的翻译（两遍法）
+        
+        Args:
+            text: 待翻译文本
+            target_language: 目标语言
+            target_duration: 目标时长（秒）
+            source_language: 源语言（可选）
+            speaking_rate: 目标语言的语速（字符/秒），如果为None则自动设置
+            tolerance: 字符数偏差容忍度（默认20%）
+            max_rounds: 最大优化轮数（默认2轮）
+        
+        Returns:
+            翻译后的文本
+        """
+        # 自动设置语速（字符/秒）
+        if speaking_rate is None:
+            speaking_rate = self._get_default_speaking_rate(target_language)
+        
+        # 计算目标字符数
+        target_char_count = int(target_duration * speaking_rate)
+        
+        logger.debug(f"翻译长度控制: 目标时长={target_duration:.2f}s, 语速={speaking_rate:.1f}字符/秒, 目标字符数={target_char_count}")
+        
+        # Pass 1: 常规翻译
+        translated = self.translate(text, target_language, source_language)
+        actual_char_count = len(translated)
+        
+        # 检查偏差
+        deviation = abs(actual_char_count - target_char_count) / max(target_char_count, 1)
+        logger.debug(f"Pass 1: 实际字符数={actual_char_count}, 偏差={deviation:.1%}")
+        
+        if deviation <= tolerance:
+            # 在容忍范围内，直接返回
+            return translated
+        
+        # Pass 2+: 长度优化
+        for round_idx in range(max_rounds):
+            if actual_char_count > target_char_count * (1 + tolerance):
+                # 太长，需要压缩
+                prompt = (
+                    f"Rewrite this translation to be approximately {target_char_count} characters "
+                    f"while keeping the core meaning. Current length is {actual_char_count} characters.\n\n"
+                    f"Text: {translated}\n\n"
+                    f"Rewritten version:"
+                )
+            elif actual_char_count < target_char_count * (1 - tolerance):
+                # 太短，需要扩展
+                prompt = (
+                    f"Expand this translation to be approximately {target_char_count} characters "
+                    f"while keeping it natural. Current length is {actual_char_count} characters.\n\n"
+                    f"Text: {translated}\n\n"
+                    f"Expanded version:"
+                )
+            else:
+                # 已经在容忍范围内
+                break
+            
+            logger.debug(f"Pass {round_idx + 2}: 尝试优化长度...")
+            
+            try:
+                # 调用LLM优化长度
+                msgs = [{'role': 'user', 'content': prompt}]
+                refined = self.model.chat(
+                    msgs=msgs,
+                    tokenizer=self.tokenizer,
+                    max_new_tokens=self.max_new_tokens,
+                    sampling=self.sampling,
+                )
+                
+                new_char_count = len(refined)
+                new_deviation = abs(new_char_count - target_char_count) / max(target_char_count, 1)
+                
+                logger.debug(f"Pass {round_idx + 2}: 新字符数={new_char_count}, 新偏差={new_deviation:.1%}")
+                
+                # 如果更好，则采用新版本
+                if new_deviation < deviation:
+                    translated = refined
+                    actual_char_count = new_char_count
+                    deviation = new_deviation
+                else:
+                    # 没有改善，停止优化
+                    break
+            
+            except Exception as e:
+                logger.warning(f"长度优化失败 (round {round_idx + 2}): {e}")
+                break
+        
+        logger.info(f"翻译完成（长度控制）: 最终字符数={len(translated)}, 目标={target_char_count}, 偏差={deviation:.1%}")
+        return translated
+    
+    def _get_default_speaking_rate(self, language: str) -> float:
+        """获取默认语速（字符/秒）
+        
+        Args:
+            language: 语言名称
+        
+        Returns:
+            语速（字符/秒）
+        """
+        # 默认语速映射
+        speaking_rates = {
+            "Chinese": 4.0,      # 中文约4字/秒
+            "English": 12.0,     # 英文约12字符/秒
+            "Japanese": 6.0,     # 日文约6字符/秒
+            "Korean": 5.0,       # 韩文约5字符/秒
+            "Spanish": 10.0,     # 西班牙语约10字符/秒
+            "French": 10.0,      # 法语约10字符/秒
+            "German": 9.0,       # 德语约9字符/秒
+        }
+        
+        return speaking_rates.get(language, 8.0)  # 默认8字符/秒

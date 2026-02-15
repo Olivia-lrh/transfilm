@@ -139,9 +139,10 @@ class TranslationEngine:
             # 编码输入
             inputs = self.tokenizer([text_input], return_tensors="pt")
             
-            # 将输入移至设备
-            if torch.cuda.is_available() and "cuda" in self.device:
-                inputs = {k: v.to(self.device) for k, v in inputs.items()}
+            # 将输入移至设备 (device_map会自动处理模型设备，我们只需将输入移至正确设备)
+            # 从模型获取设备
+            model_device = next(self.model.parameters()).device
+            inputs = {k: v.to(model_device) for k, v in inputs.items()}
             
             # 生成翻译
             with torch.no_grad():

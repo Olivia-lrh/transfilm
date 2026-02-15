@@ -33,7 +33,7 @@ setup(
     version='1.0.0',
     author='Olivia-lrh',
     author_email='',
-    description='生产级AI视频配音系统 - 使用Qwen3-ASR、Qwen3-TTS和MiniCPM-o',
+    description='生产级AI视频配音系统 - 使用Qwen3-ASR、Qwen3-TTS和Qwen3',
     long_description=read_file('README.md'),
     long_description_content_type='text/markdown',
     url='https://github.com/Olivia-lrh/transfilm',

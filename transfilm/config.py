@@ -68,10 +68,9 @@ class Config:
                     "x_vector_only_mode": False,
                 },
                 "translation": {
-                    "model_name": "openbmb/MiniCPM-o-2_6",
+                    "model_name": "Qwen/Qwen3-4B",
                     "device": "cuda:0",
                     "dtype": "bfloat16",
-                    "attn_implementation": "sdpa",
                     "max_new_tokens": 2048,
                     "sampling": False,
                 },

@@ -6,6 +6,7 @@
 
 import os
 import logging
+import numpy as np
 from typing import Optional, Callable, Dict, Any, List
 from transfilm.config import Config
 from transfilm.asr_engine import ASREngine, ASRResult
@@ -484,7 +485,6 @@ class Pipeline:
                 except Exception as e:
                     logger.error(f"合成失败: {e}")
                     # 返回空音频
-                    import numpy as np
                     synthesized_audios.append((np.array([]), 0))
             
             # 卸载TTS模型

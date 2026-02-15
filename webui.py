@@ -300,7 +300,7 @@ def create_ui():
         gr.Markdown("---")
         gr.Markdown("© 2026 Transfilm | [GitHub](https://github.com/Olivia-lrh/transfilm)")
         
-        return app
+    return app
     
     return app
 

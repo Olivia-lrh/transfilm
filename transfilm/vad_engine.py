@@ -98,9 +98,12 @@ class VADEngine:
                 # 使用WebRTC VAD作为备选
                 try:
                     import webrtcvad
-                    self.model = webrtcvad.Vad(int(self.threshold * 3))  # 0-3 aggressiveness
+                    # 将threshold (0-1) 映射到 WebRTC aggressiveness (0-3)
+                    # 使用 min/max 确保在有效范围内
+                    aggressiveness = min(3, max(0, int(self.threshold * 3)))
+                    self.model = webrtcvad.Vad(aggressiveness)
                     self._webrtc_available = True
-                    logger.info("WebRTC VAD初始化成功")
+                    logger.info(f"WebRTC VAD初始化成功 (aggressiveness={aggressiveness})")
                 except ImportError:
                     logger.error("无法导入webrtcvad，请安装: pip install webrtcvad")
                     raise

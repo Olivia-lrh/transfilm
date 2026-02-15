@@ -303,17 +303,16 @@ class SpeakerDiarization:
         transcript = "\n".join(transcript_lines)
         
         # 构建提示词
-        prompt = f"""Below is a transcript with speaker labels assigned by audio analysis. 
-Please verify the speaker assignments based on semantic context (dialogue patterns, 
-pronoun usage, topic shifts). Correct any misassignments and merge fragments 
-that belong to the same speaker turn.
-
-Transcript:
-{transcript}
-
-Output the corrected segmentation in the same format: [speaker_id] text
-Keep speaker_id format as speaker_0, speaker_1, etc.
-Only output the corrected transcript, no explanations."""
+        prompt = (
+            "Below is a transcript with speaker labels assigned by audio analysis. "
+            "Please verify the speaker assignments based on semantic context (dialogue patterns, "
+            "pronoun usage, topic shifts). Correct any misassignments and merge fragments "
+            "that belong to the same speaker turn.\n\n"
+            f"Transcript:\n{transcript}\n\n"
+            "Output the corrected segmentation in the same format: [speaker_id] text\n"
+            "Keep speaker_id format as speaker_0, speaker_1, etc.\n"
+            "Only output the corrected transcript, no explanations."
+        )
         
         try:
             # 调用LLM

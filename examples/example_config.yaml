@@ -1,0 +1,45 @@
+# Example configuration for TransFilm
+# Copy this file to config.yaml and adjust settings as needed
+
+# Model Configuration
+models:
+  asr_model: "Qwen/Qwen3-ASR"
+  tts_model: "Qwen/Qwen3-TTS"
+
+# Processing Settings
+processing:
+  device: "cuda"  # Options: cuda, cpu
+  dtype: "float16"  # Options: float32, float16, bfloat16
+  chunk_size: 30  # seconds
+  sample_rate: 16000  # Hz
+  language: "zh"  # Options: zh, en
+
+# Memory Optimization
+optimization:
+  enable_model_offloading: true
+  use_8bit: false
+  use_4bit: false
+  max_memory_per_gpu: null  # e.g., "8GB" or null for auto
+
+# Audio/Video Settings
+media:
+  audio_format: "wav"
+  audio_codec: "pcm_s16le"
+  video_codec: "libx264"
+  audio_bitrate: "192k"
+
+# Advanced Features
+features:
+  enable_voice_cloning: true
+  enable_audio_enhancement: false
+  max_concurrent_chunks: 1
+
+# Web UI Settings
+webui:
+  host: "0.0.0.0"
+  port: 7860
+  share: false  # Set to true to create public link
+
+# Logging
+logging:
+  level: "INFO"  # Options: DEBUG, INFO, WARNING, ERROR

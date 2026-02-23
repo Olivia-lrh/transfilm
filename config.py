@@ -20,6 +20,7 @@ DEFAULT_ASR_MODEL = "Qwen/Qwen3-ASR-1.7B"
 DEFAULT_TRANSLATION_MODEL = "Qwen/Qwen3-0.6B"
 DEFAULT_FORCED_ALIGNER_MODEL = "Qwen/Qwen3-ForcedAligner-0.6B"
 DEFAULT_TTS_MODEL = "Qwen/Qwen3-TTS"
+DEFAULT_LLM_MODEL = "Qwen/Qwen2.5-7B-Instruct"  # LLM for segmentation and analysis
 
 # Device configuration
 DEFAULT_DEVICE = "cuda"  # Options: "cuda", "cpu"
@@ -62,6 +63,17 @@ LOG_FILE = PROJECT_ROOT / "transfilm.log"
 ENABLE_VOICE_CLONING = True  # Enable voice characteristic preservation
 ENABLE_AUDIO_ENHANCEMENT = False  # Post-process audio for better quality
 MAX_CONCURRENT_CHUNKS = 1  # Number of chunks to process simultaneously
+
+# Speaker analysis settings
+ENABLE_SPEAKER_DIARIZATION = True  # Enable speaker identification
+MIN_SPEAKERS = 1  # Minimum number of speakers to detect
+MAX_SPEAKERS = 10  # Maximum number of speakers to detect
+VOICE_SAMPLE_DURATION = 5.0  # Duration of voice sample per speaker (seconds)
+
+# LLM-enhanced features
+ENABLE_LLM_SEGMENTATION = True  # Use LLM for intelligent sentence segmentation
+ENABLE_LLM_SPEAKER_ANALYSIS = True  # Use LLM to enhance speaker identification
+ENABLE_LLM_LENGTH_ADJUSTMENT = True  # Use LLM to adjust translation length
 
 # Model cache settings (for HuggingFace and ModelScope)
 os.environ.setdefault("HF_HOME", str(MODELS_DIR / "huggingface"))

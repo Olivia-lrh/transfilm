@@ -125,7 +125,8 @@ class TTSEngine:
         sample_rate: int = 16000,
         voice_features: Optional[Dict[str, Any]] = None,
         target_duration: Optional[float] = None,
-        reference_audio: Optional[np.ndarray] = None
+        reference_audio: Optional[np.ndarray] = None,
+        speaker_id: Optional[str] = None
     ) -> np.ndarray:
         """
         Synthesize speech from text with voice cloning and precise duration control
@@ -136,6 +137,7 @@ class TTSEngine:
             voice_features: Voice characteristics to apply
             target_duration: Target duration in seconds (for timestamp matching)
             reference_audio: Reference audio for voice cloning
+            speaker_id: Speaker ID for multi-speaker synthesis
             
         Returns:
             Audio data as numpy array matching target_duration if specified
@@ -146,6 +148,8 @@ class TTSEngine:
         self.logger.info(f"Synthesizing text: {text[:100]}...")
         if target_duration:
             self.logger.info(f"Target duration: {target_duration:.2f}s")
+        if speaker_id:
+            self.logger.info(f"Speaker: {speaker_id}")
         
         try:
             # Prepare inputs with voice cloning if reference provided
@@ -158,6 +162,7 @@ class TTSEngine:
                     truncation=True
                 )
                 # Add reference audio processing here when API is available
+                # This would involve extracting speaker embeddings from reference_audio
             else:
                 inputs = self.tokenizer(
                     text,
@@ -326,6 +331,73 @@ class TTSEngine:
             self.logger.info(f"Processing text {i+1}/{len(texts)}")
             target_duration = target_durations[i] if target_durations else None
             audio = self.synthesize(text, sample_rate, voice_features, target_duration)
+            audio_list.append(audio)
+        
+        return audio_list
+    
+    def synthesize_multi_speaker(
+        self,
+        segments: List[Dict],
+        voice_samples: Dict[str, np.ndarray],
+        sample_rate: int = 16000
+    ) -> List[np.ndarray]:
+        """
+        Synthesize audio for multiple speakers using their voice samples
+        
+        Args:
+            segments: List of text segments with speaker info and timestamps
+                [
+                    {
+                        'text': 'text to synthesize',
+                        'speaker_id': 'SPEAKER_00',
+                        'start': 0.0,
+                        'end': 2.5,
+                        'duration': 2.5
+                    },
+                    ...
+                ]
+            voice_samples: Dictionary mapping speaker_id to voice sample audio
+                {
+                    'SPEAKER_00': audio_array,
+                    'SPEAKER_01': audio_array,
+                    ...
+                }
+            sample_rate: Target sample rate
+            
+        Returns:
+            List of synthesized audio arrays corresponding to each segment
+        """
+        self.logger.info(f"Synthesizing {len(segments)} segments with multi-speaker support")
+        
+        audio_list = []
+        
+        for i, segment in enumerate(segments):
+            text = segment.get('text', '')
+            speaker_id = segment.get('speaker_id', 'UNKNOWN')
+            target_duration = segment.get('duration') or (segment.get('end', 0) - segment.get('start', 0))
+            
+            # Get reference audio for this speaker
+            reference_audio = voice_samples.get(speaker_id)
+            
+            if reference_audio is None:
+                self.logger.warning(
+                    f"No voice sample for {speaker_id}, using default voice"
+                )
+            
+            self.logger.info(
+                f"Synthesizing segment {i+1}/{len(segments)}: "
+                f"{speaker_id}, duration={target_duration:.2f}s"
+            )
+            
+            # Synthesize with speaker's voice
+            audio = self.synthesize(
+                text=text,
+                sample_rate=sample_rate,
+                reference_audio=reference_audio,
+                target_duration=target_duration,
+                speaker_id=speaker_id
+            )
+            
             audio_list.append(audio)
         
         return audio_list

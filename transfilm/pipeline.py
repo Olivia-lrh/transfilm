@@ -15,6 +15,8 @@ from .asr_engine import ASREngine
 from .translation_engine import TranslationEngine
 from .forced_aligner_engine import ForcedAlignerEngine
 from .tts_engine import TTSEngine
+from .speaker_analyzer import SpeakerAnalyzer
+from .llm_engine import LLMEngine
 from .utils import setup_logger, format_time, ensure_dir
 import config
 
@@ -30,11 +32,14 @@ class VideoDubbingPipeline:
         translation_model: str = None,
         forced_aligner_model: str = None,
         tts_model: str = None,
+        llm_model: str = None,
         device: str = None,
         chunk_size: float = None,
         source_language: str = None,
         target_language: str = None,
         sample_rate: int = None,
+        enable_speaker_diarization: bool = None,
+        enable_llm_features: bool = None,
         progress_callback: Optional[Callable[[str, float], None]] = None
     ):
         """
@@ -45,22 +50,34 @@ class VideoDubbingPipeline:
             translation_model: Translation model name or path (Qwen3-0.6B)
             forced_aligner_model: Forced aligner model name or path (Qwen3-ForcedAligner-0.6B)
             tts_model: TTS model name or path (Qwen3-TTS)
+            llm_model: LLM model name or path (for segmentation and analysis)
             device: Device to run on
             chunk_size: Audio chunk size in seconds
             source_language: Source language code
             target_language: Target language code
             sample_rate: Audio sample rate
+            enable_speaker_diarization: Enable speaker identification and multi-speaker cloning
+            enable_llm_features: Enable LLM-based features (segmentation, length adjustment)
             progress_callback: Function(message, progress_percent) for progress updates
         """
         self.asr_model = asr_model or config.DEFAULT_ASR_MODEL
         self.translation_model = translation_model or config.DEFAULT_TRANSLATION_MODEL
         self.forced_aligner_model = forced_aligner_model or config.DEFAULT_FORCED_ALIGNER_MODEL
         self.tts_model = tts_model or config.DEFAULT_TTS_MODEL
+        self.llm_model = llm_model or getattr(config, 'DEFAULT_LLM_MODEL', 'Qwen/Qwen2.5-7B-Instruct')
         self.device = device or config.DEFAULT_DEVICE
         self.chunk_size = chunk_size or config.DEFAULT_CHUNK_SIZE
         self.source_language = source_language or config.DEFAULT_LANGUAGE
         self.target_language = target_language or config.DEFAULT_TARGET_LANGUAGE
         self.sample_rate = sample_rate or config.DEFAULT_SAMPLE_RATE
+        self.enable_speaker_diarization = (
+            enable_speaker_diarization if enable_speaker_diarization is not None
+            else getattr(config, 'ENABLE_SPEAKER_DIARIZATION', True)
+        )
+        self.enable_llm_features = (
+            enable_llm_features if enable_llm_features is not None
+            else getattr(config, 'ENABLE_LLM_SEGMENTATION', True)
+        )
         self.progress_callback = progress_callback
         
         self.logger = logger
@@ -74,6 +91,8 @@ class VideoDubbingPipeline:
         self.translation_engine = None
         self.forced_aligner_engine = None
         self.tts_engine = None
+        self.speaker_analyzer = None
+        self.llm_engine = None
         
         # Working directory for temporary files
         self.work_dir = None
@@ -91,12 +110,14 @@ class VideoDubbingPipeline:
         keep_temp: bool = False
     ) -> Path:
         """
-        Process video file with enhanced workflow:
-        1. ASR transcription (Qwen3-ASR-1.7B)
-        2. Segmentation and translation (Qwen3-0.6B)
-        3. Timestamp alignment (Qwen3-ForcedAligner-0.6B)
-        4. Voice cloning and TTS (Qwen3-TTS)
-        5. Audio concatenation and video assembly
+        Process video file with enhanced multi-speaker workflow:
+        1. Audio extraction and speaker analysis
+        2. ASR transcription
+        3. LLM-based sentence segmentation and speaker assignment
+        4. Translation with LLM length adjustment
+        5. Timestamp alignment
+        6. Multi-speaker voice cloning and TTS
+        7. Audio concatenation and video assembly
         
         Args:
             input_video: Path to input video file
@@ -117,7 +138,7 @@ class VideoDubbingPipeline:
         self.logger.info(f"Working directory: {self.work_dir}")
         
         try:
-            # === Stage 1: Extract and prepare audio (0-10%) ===
+            # === Stage 1: Extract audio and analyze speakers (0-15%) ===
             self._report_progress("Stage 1: Extracting audio from video", 2)
             audio_file = self.work_dir / "original_audio.wav"
             video_only_file = self.work_dir / "video_only.mp4"
@@ -132,50 +153,109 @@ class VideoDubbingPipeline:
             # Load full audio
             audio_data, sr = self.audio_processor.load_audio(audio_file)
             audio_duration = len(audio_data) / sr
-            self._report_progress(f"Audio extracted: {audio_duration:.2f}s", 10)
+            self._report_progress(f"Audio extracted: {audio_duration:.2f}s", 8)
             
-            # === Stage 2: ASR Transcription (10-25%) ===
-            self._report_progress("Stage 2: Transcribing audio with Qwen3-ASR-1.7B", 12)
+            # Analyze speakers if enabled
+            speaker_segments = None
+            voice_samples = {}
+            
+            if self.enable_speaker_diarization:
+                self._report_progress("Analyzing speakers in audio", 10)
+                speaker_segments = self._analyze_speakers(audio_data, sr)
+                
+                # Extract voice samples for each speaker (5 seconds each)
+                voice_samples = self._extract_voice_samples(
+                    audio_data, sr, speaker_segments
+                )
+                num_speakers = len(voice_samples)
+                self._report_progress(
+                    f"Speaker analysis complete: {num_speakers} speakers detected",
+                    15
+                )
+            else:
+                self._report_progress("Speaker analysis skipped", 15)
+            
+            # === Stage 2: ASR Transcription (15-30%) ===
+            self._report_progress("Stage 2: Transcribing audio with Qwen3-ASR-1.7B", 17)
             transcription = self._transcribe_audio(audio_data)
-            self._report_progress(f"Transcription complete: {len(transcription)} chars", 25)
+            self._report_progress(f"Transcription complete: {len(transcription)} chars", 30)
             
-            # === Stage 3: Segmentation and Translation (25-45%) ===
-            self._report_progress("Stage 3: Segmenting and translating with Qwen3-0.6B", 27)
-            translation_results = self._segment_and_translate(transcription)
+            # === Stage 3: LLM-based Segmentation and Speaker Assignment (30-45%) ===
+            if self.enable_llm_features:
+                self._report_progress(
+                    "Stage 3: LLM-based sentence segmentation and speaker assignment",
+                    32
+                )
+                text_segments = self._llm_segment_and_assign_speakers(
+                    transcription, speaker_segments
+                )
+            else:
+                self._report_progress(
+                    "Stage 3: Rule-based segmentation and speaker assignment",
+                    32
+                )
+                text_segments = self._simple_segment_and_assign(
+                    transcription, speaker_segments
+                )
+            
             self._report_progress(
-                f"Translation complete: {len(translation_results)} segments",
+                f"Segmentation complete: {len(text_segments)} segments",
                 45
             )
             
-            # === Stage 4: Timestamp Alignment (45-60%) ===
-            self._report_progress("Stage 4: Generating timestamps with Qwen3-ForcedAligner-0.6B", 47)
-            original_sentences = [r['original'] for r in translation_results]
-            alignments = self._align_timestamps(audio_data, original_sentences)
-            
-            # Refine alignments to match total duration
-            alignments = self._refine_alignments(alignments, audio_duration)
-            self._report_progress(f"Timestamps generated for {len(alignments)} segments", 60)
-            
-            # === Stage 5: Voice Cloning and TTS (60-85%) ===
-            self._report_progress("Stage 5: Generating speech with Qwen3-TTS", 62)
-            
-            # Extract voice features from original audio for cloning
-            voice_features = self.audio_processor.extract_voice_features(audio_data)
-            
-            # Generate new audio segments with precise duration matching
-            new_audio_segments = self._synthesize_with_timestamps(
-                translation_results,
-                alignments,
-                audio_data,
-                voice_features
+            # === Stage 4: Translation with LLM Length Adjustment (45-60%) ===
+            self._report_progress("Stage 4: Translating segments", 47)
+            translated_segments = self._translate_segments(text_segments)
+            self._report_progress(
+                f"Translation complete: {len(translated_segments)} segments",
+                60
             )
-            self._report_progress("TTS generation complete", 85)
             
-            # === Stage 6: Audio Concatenation (85-92%) ===
-            self._report_progress("Stage 6: Concatenating audio segments", 87)
-            final_audio = self.audio_processor.concatenate_audio_with_timestamps(
+            # === Stage 5: Timestamp Alignment (60-70%) ===
+            self._report_progress(
+                "Stage 5: Generating timestamps with Qwen3-ForcedAligner-0.6B",
+                62
+            )
+            
+            # Align timestamps for each segment
+            segments_with_timestamps = self._align_segment_timestamps(
+                audio_data, translated_segments
+            )
+            
+            # Refine to match total duration
+            segments_with_timestamps = self._refine_segment_timestamps(
+                segments_with_timestamps, audio_duration
+            )
+            
+            self._report_progress(
+                f"Timestamps generated for {len(segments_with_timestamps)} segments",
+                70
+            )
+            
+            # === Stage 6: Multi-Speaker Voice Cloning and TTS (70-90%) ===
+            self._report_progress("Stage 6: Generating speech with multi-speaker TTS", 72)
+            
+            if self.enable_speaker_diarization and voice_samples:
+                # Multi-speaker synthesis
+                new_audio_segments = self._synthesize_multi_speaker(
+                    segments_with_timestamps,
+                    voice_samples
+                )
+            else:
+                # Single voice synthesis
+                voice_features = self.audio_processor.extract_voice_features(audio_data)
+                new_audio_segments = self._synthesize_single_speaker(
+                    segments_with_timestamps,
+                    voice_features
+                )
+            
+            self._report_progress("TTS generation complete", 90)
+            
+            # === Stage 7: Audio Concatenation (90-95%) ===
+            self._report_progress("Stage 7: Concatenating audio segments", 91)
+            final_audio = self._concatenate_by_timestamps(
                 new_audio_segments,
-                alignments,
+                segments_with_timestamps,
                 audio_duration
             )
             
@@ -186,10 +266,10 @@ class VideoDubbingPipeline:
                 f"(target: {audio_duration:.2f}s, "
                 f"difference: {abs(final_duration - audio_duration):.3f}s)"
             )
-            self._report_progress("Audio concatenation complete", 92)
+            self._report_progress("Audio concatenation complete", 95)
             
-            # === Stage 7: Save and Combine (92-100%) ===
-            self._report_progress("Stage 7: Combining video and audio", 94)
+            # === Stage 8: Save and Combine (95-100%) ===
+            self._report_progress("Stage 8: Combining video and audio", 96)
             new_audio_file = self.work_dir / "dubbed_audio.wav"
             self.audio_processor.save_audio(final_audio, new_audio_file)
             
@@ -211,7 +291,7 @@ class VideoDubbingPipeline:
             
             elapsed_time = time.time() - start_time
             self._report_progress(
-                f"Enhanced video dubbing complete in {format_time(elapsed_time)}",
+                f"Enhanced multi-speaker video dubbing complete in {format_time(elapsed_time)}",
                 100
             )
             
@@ -234,6 +314,10 @@ class VideoDubbingPipeline:
                 self.forced_aligner_engine.unload_model()
             if self.tts_engine:
                 self.tts_engine.unload_model()
+            if self.speaker_analyzer:
+                self.speaker_analyzer.unload_model()
+            if self.llm_engine:
+                self.llm_engine.unload_model()
     
     def _transcribe_audio(self, audio_data: np.ndarray) -> str:
         """
@@ -459,6 +543,341 @@ class VideoDubbingPipeline:
                     )
         
         return audio_segments
+    
+    def _analyze_speakers(
+        self,
+        audio_data: np.ndarray,
+        sample_rate: int
+    ) -> List[Dict]:
+        """Analyze audio and identify speakers"""
+        if self.speaker_analyzer is None:
+            self.speaker_analyzer = SpeakerAnalyzer(
+                device=self.device,
+                min_speakers=getattr(config, 'MIN_SPEAKERS', 1),
+                max_speakers=getattr(config, 'MAX_SPEAKERS', 10),
+                voice_sample_duration=getattr(config, 'VOICE_SAMPLE_DURATION', 5.0)
+            )
+        
+        speaker_segments = self.speaker_analyzer.analyze_speakers(audio_data, sample_rate)
+        return speaker_segments
+    
+    def _extract_voice_samples(
+        self,
+        audio_data: np.ndarray,
+        sample_rate: int,
+        speaker_segments: List[Dict]
+    ) -> Dict[str, np.ndarray]:
+        """Extract 5-second voice samples for each speaker"""
+        if self.speaker_analyzer is None:
+            self.speaker_analyzer = SpeakerAnalyzer(
+                device=self.device,
+                voice_sample_duration=getattr(config, 'VOICE_SAMPLE_DURATION', 5.0)
+            )
+        
+        voice_samples = self.speaker_analyzer.extract_voice_samples(
+            audio_data, sample_rate, speaker_segments
+        )
+        
+        # Save voice samples for debugging if needed
+        if self.work_dir:
+            for speaker_id, sample in voice_samples.items():
+                sample_file = self.work_dir / f"voice_sample_{speaker_id}.wav"
+                self.audio_processor.save_audio(sample, sample_file, sample_rate)
+        
+        return voice_samples
+    
+    def _llm_segment_and_assign_speakers(
+        self,
+        transcription: str,
+        speaker_segments: Optional[List[Dict]]
+    ) -> List[Dict]:
+        """Use LLM to segment text and assign speakers"""
+        if self.llm_engine is None:
+            self.llm_engine = LLMEngine(
+                model_name=self.llm_model,
+                device=self.device
+            )
+        
+        # LLM-based sentence segmentation
+        text_segments = self.llm_engine.segment_sentences(
+            transcription,
+            speaker_info=speaker_segments,
+            language=self.source_language
+        )
+        
+        # If we have speaker analysis, assign speakers to segments
+        if speaker_segments and self.speaker_analyzer:
+            # First, we need timestamps for text segments
+            # This is a chicken-and-egg problem - we need rough timestamps first
+            # For now, distribute evenly (will be refined by forced aligner)
+            total_chars = sum(len(seg['text']) for seg in text_segments)
+            current_time = 0.0
+            
+            for seg in text_segments:
+                # Rough estimate based on character proportion
+                char_ratio = len(seg['text']) / total_chars if total_chars > 0 else 0
+                duration = char_ratio * len(speaker_segments) * 5.0  # Rough estimate
+                seg['start'] = current_time
+                seg['end'] = current_time + duration
+                current_time += duration
+            
+            # Assign speakers based on rough timestamps
+            text_segments = self.speaker_analyzer.assign_speaker_to_text(
+                text_segments, speaker_segments
+            )
+        
+        return text_segments
+    
+    def _simple_segment_and_assign(
+        self,
+        transcription: str,
+        speaker_segments: Optional[List[Dict]]
+    ) -> List[Dict]:
+        """Fallback: simple rule-based segmentation"""
+        # Use LLMEngine's fallback method
+        if self.llm_engine is None:
+            self.llm_engine = LLMEngine(model_name=self.llm_model, device=self.device)
+        
+        text_segments = self.llm_engine._simple_segmentation(
+            transcription, self.source_language
+        )
+        
+        # Assign speakers if available
+        if speaker_segments and self.speaker_analyzer:
+            # Add rough timestamps
+            total_chars = sum(len(seg['text']) for seg in text_segments)
+            current_time = 0.0
+            
+            for seg in text_segments:
+                char_ratio = len(seg['text']) / total_chars if total_chars > 0 else 0
+                duration = char_ratio * 60.0  # Rough 1 minute total
+                seg['start'] = current_time
+                seg['end'] = current_time + duration
+                current_time += duration
+            
+            text_segments = self.speaker_analyzer.assign_speaker_to_text(
+                text_segments, speaker_segments
+            )
+        
+        return text_segments
+    
+    def _translate_segments(
+        self,
+        text_segments: List[Dict]
+    ) -> List[Dict]:
+        """Translate each segment with LLM length adjustment"""
+        if self.translation_engine is None:
+            self.translation_engine = TranslationEngine(
+                model_name=self.translation_model,
+                device=self.device
+            )
+        
+        translated_segments = []
+        
+        for i, segment in enumerate(text_segments):
+            text = segment['text']
+            
+            # Initial translation
+            translation = self.translation_engine.translate(
+                text,
+                source_lang=self.source_language,
+                target_lang=self.target_language
+            )
+            
+            # Store translated segment
+            translated_segment = {
+                'original': text,
+                'translation': translation,
+                'speaker_id': segment.get('speaker_id', 'UNKNOWN'),
+                'start_char': segment.get('start_char', 0),
+                'end_char': segment.get('end_char', len(text))
+            }
+            
+            translated_segments.append(translated_segment)
+        
+        return translated_segments
+    
+    def _align_segment_timestamps(
+        self,
+        audio_data: np.ndarray,
+        translated_segments: List[Dict]
+    ) -> List[Dict]:
+        """Generate timestamps for each segment using forced aligner"""
+        if self.forced_aligner_engine is None:
+            self.forced_aligner_engine = ForcedAlignerEngine(
+                model_name=self.forced_aligner_model,
+                device=self.device
+            )
+        
+        # Extract original texts for alignment
+        original_texts = [seg['original'] for seg in translated_segments]
+        
+        # Get timestamps
+        alignments = self.forced_aligner_engine.align(
+            audio_data,
+            original_texts,
+            language=self.source_language
+        )
+        
+        # Combine with translated segments
+        segments_with_timestamps = []
+        for segment, alignment in zip(translated_segments, alignments):
+            combined = {
+                **segment,
+                'start': alignment['start'],
+                'end': alignment['end'],
+                'duration': alignment['duration']
+            }
+            segments_with_timestamps.append(combined)
+        
+        return segments_with_timestamps
+    
+    def _refine_segment_timestamps(
+        self,
+        segments: List[Dict],
+        total_duration: float
+    ) -> List[Dict]:
+        """Refine timestamps to match total duration"""
+        if not segments:
+            return segments
+        
+        # Calculate current total
+        current_total = max(seg['end'] for seg in segments)
+        
+        # Scale if needed
+        if abs(current_total - total_duration) > 0.1:
+            scale_factor = total_duration / current_total
+            self.logger.info(
+                f"Scaling timestamps: {current_total:.2f}s -> {total_duration:.2f}s "
+                f"(factor: {scale_factor:.3f})"
+            )
+            
+            for seg in segments:
+                seg['start'] *= scale_factor
+                seg['end'] *= scale_factor
+                seg['duration'] = seg['end'] - seg['start']
+        
+        return segments
+    
+    def _synthesize_multi_speaker(
+        self,
+        segments: List[Dict],
+        voice_samples: Dict[str, np.ndarray]
+    ) -> List[np.ndarray]:
+        """Synthesize audio for multiple speakers"""
+        if self.tts_engine is None:
+            self.tts_engine = TTSEngine(
+                model_name=self.tts_model,
+                device=self.device
+            )
+        
+        # Use TTS engine's multi-speaker method
+        audio_segments = self.tts_engine.synthesize_multi_speaker(
+            segments, voice_samples, self.sample_rate
+        )
+        
+        # Apply LLM length adjustment if needed and enabled
+        if self.enable_llm_features and self.llm_engine:
+            audio_segments = self._adjust_segments_with_llm(
+                segments, audio_segments
+            )
+        
+        return audio_segments
+    
+    def _synthesize_single_speaker(
+        self,
+        segments: List[Dict],
+        voice_features: Dict
+    ) -> List[np.ndarray]:
+        """Synthesize audio with single voice"""
+        if self.tts_engine is None:
+            self.tts_engine = TTSEngine(
+                model_name=self.tts_model,
+                device=self.device
+            )
+        
+        audio_segments = []
+        
+        for i, segment in enumerate(segments):
+            text = segment['translation']
+            target_duration = segment.get('duration', 5.0)
+            
+            audio = self.tts_engine.synthesize(
+                text,
+                sample_rate=self.sample_rate,
+                voice_features=voice_features,
+                target_duration=target_duration
+            )
+            
+            audio_segments.append(audio)
+        
+        return audio_segments
+    
+    def _adjust_segments_with_llm(
+        self,
+        segments: List[Dict],
+        audio_segments: List[np.ndarray]
+    ) -> List[np.ndarray]:
+        """Use LLM to adjust translation if duration mismatch is significant"""
+        adjusted_segments = []
+        
+        for i, (segment, audio) in enumerate(zip(segments, audio_segments)):
+            target_duration = segment.get('duration', 5.0)
+            actual_duration = len(audio) / self.sample_rate
+            
+            # If significant mismatch, try to adjust translation
+            if abs(actual_duration - target_duration) / target_duration > 0.15:  # >15% diff
+                self.logger.info(
+                    f"Segment {i+1}: Duration mismatch {actual_duration:.2f}s vs "
+                    f"{target_duration:.2f}s, attempting LLM adjustment"
+                )
+                
+                # Get adjusted translation
+                adjusted_translation = self.llm_engine.adjust_translation_length(
+                    original_text=segment['original'],
+                    translation=segment['translation'],
+                    target_duration=target_duration,
+                    actual_duration=actual_duration,
+                    language=self.source_language,
+                    target_language=self.target_language
+                )
+                
+                # Re-synthesize with adjusted translation
+                if adjusted_translation != segment['translation']:
+                    self.logger.info(f"Re-synthesizing with adjusted translation")
+                    
+                    # Get voice sample for this speaker
+                    speaker_id = segment.get('speaker_id')
+                    reference = None  # Would need to pass voice_samples here
+                    
+                    audio = self.tts_engine.synthesize(
+                        adjusted_translation,
+                        sample_rate=self.sample_rate,
+                        target_duration=target_duration,
+                        reference_audio=reference,
+                        speaker_id=speaker_id
+                    )
+                    adjusted_segments.append(audio)
+                else:
+                    adjusted_segments.append(audio)
+            else:
+                adjusted_segments.append(audio)
+        
+        return adjusted_segments
+    
+    def _concatenate_by_timestamps(
+        self,
+        audio_segments: List[np.ndarray],
+        segments: List[Dict],
+        total_duration: float
+    ) -> np.ndarray:
+        """Concatenate audio segments according to timestamps"""
+        # Use audio processor's timestamp-aware concatenation
+        return self.audio_processor.concatenate_audio_with_timestamps(
+            audio_segments,
+            segments,
+            total_duration
+        )
     
     def get_video_info(self, video_path: Path) -> Dict[str, Any]:
         """Get video information"""

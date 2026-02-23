@@ -18,6 +18,8 @@ def check_files():
             'transfilm/video_processor.py',
             'transfilm/audio_processor.py',
             'transfilm/asr_engine.py',
+            'transfilm/translation_engine.py',
+            'transfilm/forced_aligner_engine.py',
             'transfilm/tts_engine.py',
             'transfilm/utils.py',
         ],
@@ -37,6 +39,8 @@ def check_files():
             'CONTRIBUTING.md',
             'MODEL_INTEGRATION.md',
             'PROJECT_STATUS.md',
+            'ENHANCED_WORKFLOW.md',
+            'IMPLEMENTATION_SUMMARY.md',
             'examples/example_config.yaml',
         ],
         'Testing & Deployment': [

@@ -21,6 +21,8 @@ def check_files():
             'transfilm/translation_engine.py',
             'transfilm/forced_aligner_engine.py',
             'transfilm/tts_engine.py',
+            'transfilm/speaker_analyzer.py',
+            'transfilm/llm_engine.py',
             'transfilm/utils.py',
         ],
         'Interfaces': [

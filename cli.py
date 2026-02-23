@@ -72,6 +72,12 @@ Examples:
         default=config.DEFAULT_TTS_MODEL,
         help=f"TTS model name or path (default: {config.DEFAULT_TTS_MODEL})"
     )
+    parser.add_argument(
+        "--llm-model",
+        type=str,
+        default=getattr(config, 'DEFAULT_LLM_MODEL', 'Qwen/Qwen2.5-7B-Instruct'),
+        help=f"LLM model name or path (default: {getattr(config, 'DEFAULT_LLM_MODEL', 'Qwen/Qwen2.5-7B-Instruct')})"
+    )
     
     # Processing arguments
     parser.add_argument(
@@ -106,6 +112,30 @@ Examples:
         type=int,
         default=config.DEFAULT_SAMPLE_RATE,
         help=f"Audio sample rate in Hz (default: {config.DEFAULT_SAMPLE_RATE})"
+    )
+    
+    # Speaker and LLM features
+    parser.add_argument(
+        "--enable-speaker-diarization",
+        action="store_true",
+        default=getattr(config, 'ENABLE_SPEAKER_DIARIZATION', True),
+        help="Enable speaker identification and multi-speaker voice cloning"
+    )
+    parser.add_argument(
+        "--disable-speaker-diarization",
+        action="store_true",
+        help="Disable speaker identification (use single voice)"
+    )
+    parser.add_argument(
+        "--enable-llm-features",
+        action="store_true",
+        default=getattr(config, 'ENABLE_LLM_SEGMENTATION', True),
+        help="Enable LLM-based segmentation and length adjustment"
+    )
+    parser.add_argument(
+        "--disable-llm-features",
+        action="store_true",
+        help="Disable LLM features (use rule-based methods)"
     )
     
     # Additional options
@@ -179,25 +209,46 @@ def main():
     try:
         # Display configuration
         print("\n" + "="*60)
-        print("TransFilm - AI Video Dubbing (Enhanced Workflow)")
+        print("TransFilm - AI Video Dubbing (Enhanced Multi-Speaker Workflow)")
         print("="*60)
-        print(f"Input:             {input_path}")
-        print(f"Output:            {output_path}")
-        print(f"ASR Model:         {args.asr_model}")
-        print(f"Translation Model: {args.translation_model}")
-        print(f"Aligner Model:     {args.forced_aligner_model}")
-        print(f"TTS Model:         {args.tts_model}")
-        print(f"Device:            {args.device}")
-        print(f"Chunk Size:        {args.chunk_size}s")
-        print(f"Source Language:   {args.language}")
-        print(f"Target Language:   {args.target_language}")
-        print(f"Sample Rate:       {args.sample_rate} Hz")
+        print(f"Input:                 {input_path}")
+        print(f"Output:                {output_path}")
+        print(f"ASR Model:             {args.asr_model}")
+        print(f"Translation Model:     {args.translation_model}")
+        print(f"Aligner Model:         {args.forced_aligner_model}")
+        print(f"TTS Model:             {args.tts_model}")
+        print(f"LLM Model:             {args.llm_model}")
+        print(f"Device:                {args.device}")
+        print(f"Chunk Size:            {args.chunk_size}s")
+        print(f"Source Language:       {args.language}")
+        print(f"Target Language:       {args.target_language}")
+        print(f"Sample Rate:           {args.sample_rate} Hz")
+        
+        # Determine speaker diarization setting
+        enable_speaker = args.enable_speaker_diarization and not args.disable_speaker_diarization
+        print(f"Speaker Diarization:   {'Enabled' if enable_speaker else 'Disabled'}")
+        
+        # Determine LLM features setting
+        enable_llm = args.enable_llm_features and not args.disable_llm_features
+        print(f"LLM Features:          {'Enabled' if enable_llm else 'Disabled'}")
         print("="*60 + "\n")
         
         # Create pipeline
         pipeline = VideoDubbingPipeline(
             asr_model=args.asr_model,
             translation_model=args.translation_model,
+            forced_aligner_model=args.forced_aligner_model,
+            tts_model=args.tts_model,
+            llm_model=args.llm_model,
+            device=args.device,
+            chunk_size=args.chunk_size,
+            source_language=args.language,
+            target_language=args.target_language,
+            sample_rate=args.sample_rate,
+            enable_speaker_diarization=enable_speaker,
+            enable_llm_features=enable_llm,
+            progress_callback=progress_callback
+        )
             forced_aligner_model=args.forced_aligner_model,
             tts_model=args.tts_model,
             device=args.device,
